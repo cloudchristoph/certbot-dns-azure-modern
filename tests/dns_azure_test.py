@@ -385,12 +385,15 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
 
     def test_ttl_invalid(self):
         from certbot_dns_azure._internal.dns_azure import Authenticator
+        auth_name = "azure"
         for bad in (0, -5, 'soon'):
             config = mock.MagicMock(azure_config=self.sp_config.azure_config,
                                     azure_propagation_seconds=0, azure_ttl=bad)
             with self.assertRaises(errors.PluginError) as cm:
-                Authenticator(config, "azure")
-            self.assertIn('--azure-ttl must be', cm.exception.args[0])
+                Authenticator(config, auth_name)
+            # The message names the option after the plugin name certbot registered it
+            # under: "--dns-azure-ttl" in a real install, "--azure-ttl" in this test setup.
+            self.assertIn('--{}-ttl must be'.format(auth_name), cm.exception.args[0])
 
     def test_get_azure_client_uses_keyword_arguments(self):
         # azure-mgmt-dns 9.x dropped the positional api_version parameter; the client
