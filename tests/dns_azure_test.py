@@ -352,6 +352,21 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
         self.assertEqual(self.auth._get_ids_for_domain('a.sub.xyz.net', '_acme-challenge.a.sub.xyz.net')[0], 'sub.xyz.net')
         self.assertEqual(self.auth._get_ids_for_domain('other.xyz.net', '_acme-challenge.other.xyz.net')[0], 'xyz.net')
 
+    def test_get_azure_client_uses_keyword_arguments(self):
+        # azure-mgmt-dns 9.x dropped the positional api_version parameter; the client
+        # must be built with keyword arguments so both 8.x and 9.x work. The scope has
+        # a single slash even though the endpoint ends with one.
+        from certbot_dns_azure._internal import dns_azure
+        auth = dns_azure.Authenticator(self.sp_config, "azure")
+        auth.credential = self.mock_credentials
+        auth._arm_endpoint = 'https://management.usgovcloudapi.net/'
+        with mock.patch.object(dns_azure, 'DnsManagementClient') as client_cls:
+            auth._get_azure_client('c135abce-d87d-48df-936c-15596c6968a5')
+        client_cls.assert_called_once_with(
+            self.mock_credentials, 'c135abce-d87d-48df-936c-15596c6968a5',
+            base_url='https://management.usgovcloudapi.net/',
+            credential_scopes=['https://management.usgovcloudapi.net/.default'])
+
     def test_get_relative_domain(self):
         from certbot_dns_azure._internal.dns_azure import Authenticator
         rel = Authenticator._get_relative_domain

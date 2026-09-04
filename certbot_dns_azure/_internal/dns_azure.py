@@ -367,7 +367,7 @@ class Authenticator(dns_common.DNSAuthenticator):
         # (credential, subscription_id, base_url, ...). Keywords work for both.
         return DnsManagementClient(self.credential, subscription_id,
                                    base_url=self._arm_endpoint,
-                                   credential_scopes=[self._arm_endpoint + "/.default"])
+                                   credential_scopes=[self._arm_endpoint.rstrip('/') + "/.default"])
 
     @staticmethod
     def parse_azure_resource_id(resource_id):
