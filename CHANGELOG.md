@@ -1,28 +1,12 @@
 # Changelog
 
-## Unreleased
+## 2.8.0 (2026-09-04)
 
-- Boolean config keys (`dns_azure_use_cli_credentials`, `dns_azure_msi_system_assigned`,
-  `dns_azure_use_workload_identity_credentials`) are parsed as booleans. Previously any
-  non-empty value, including `false`, switched the method on, so a service principal
-  next to `dns_azure_use_cli_credentials = false` silently used the Azure CLI login.
-- An unknown `dns_azure_environment` is reported as a configuration error naming the
-  valid values instead of a `KeyError` traceback.
-- Retrying a TXT record update after a concurrent-modification response (HTTP 412)
-  re-resolves the record from the original validation name; the retry previously
-  passed the already relative record name back in.
-- Record sets without TXT values no longer raise `TypeError`.
-- Creating a new `_acme-challenge` record set is conditional (`If-None-Match: *`). Two
-  certbot runs racing for the same name no longer overwrite each other; the loser
-  re-reads the record and merges its value, as already happened for updates.
-- A zone mapping whose resource id lacks `/subscriptions/<id>/resourceGroups/<name>`
-  is rejected with a clear message instead of a `ValueError` from the Azure SDK.
-- Zone names in mappings are compared case-insensitively and trimmed, so
-  `Example.com` and `example.com` count as the same zone.
-- Python 3.10 or newer is required (was 3.9). certbot 5.x needs 3.10, and on 3.9 pip
-  silently fell back to certbot 3.x. CI now tests 3.10 to 3.13.
-- `AzureGermanCloud` is no longer accepted as `dns_azure_environment`; Microsoft closed
-  that cloud in 2021.
+Every open upstream issue that can be fixed in code is addressed in this release, plus
+a pre-release review of the whole plugin.
+
+### Added
+
 - Zones can use different credentials: put zones that share an identity into an INI
   section (`[name]`) together with that identity's settings. Sections without
   authentication keys use the top-level credentials. This allows one certificate to
@@ -33,18 +17,56 @@
   `api_version` parameter of `DnsManagementClient`, which made the plugin fail with
   `TypeError: __init__() takes from 3 to 4 positional arguments but 5 were given`;
   the client is now constructed with keyword arguments, which works for 8.x and 9.x
-  (terricain/certbot-dns-azure#60, #62). The token scope is now
-  `https://management.azure.com/.default` (single slash), as used by the Azure SDK
-  itself.
-- Zone matching now respects label boundaries: a request for `abcxyz.net` no longer
+  (terricain/certbot-dns-azure#60, #62).
+
+### Fixed
+
+- Zone matching respects label boundaries: a request for `abcxyz.net` no longer
   matches a configured zone `xyz.net`, and the relative record name is derived by
   stripping the zone suffix instead of a substring replace
   (terricain/certbot-dns-azure#61).
-- CI: the unit tests run against both `azure-mgmt-dns` lines (8.x and 9.x); the Azure
-  integration test (real certificate issuance) is a required check for pull requests
-  that change code, runs on release tags and once a week against the latest certbot
-  and Azure SDK releases; `main` is protected and only changes via pull request;
-  Dependabot keeps the GitHub Actions current.
+- Boolean config keys (`dns_azure_use_cli_credentials`, `dns_azure_msi_system_assigned`,
+  `dns_azure_use_workload_identity_credentials`) are parsed as booleans. Previously any
+  non-empty value, including `false`, switched the method on, so a service principal
+  next to `dns_azure_use_cli_credentials = false` silently used the Azure CLI login.
+- Creating a new `_acme-challenge` record set is conditional (`If-None-Match: *`). Two
+  certbot runs racing for the same name no longer overwrite each other; the loser
+  re-reads the record and merges its value, as already happened for updates.
+- Retrying a TXT record update after a concurrent-modification response (HTTP 412)
+  re-resolves the record from the original validation name; the retry previously
+  passed the already relative record name back in.
+- Record sets without TXT values no longer raise `TypeError`.
+- An unknown `dns_azure_environment` is reported as a configuration error naming the
+  valid values instead of a `KeyError` traceback.
+- A zone mapping whose resource id lacks `/subscriptions/<id>/resourceGroups/<name>`
+  is rejected with a clear message instead of a `ValueError` from the Azure SDK.
+- Zone names in mappings are compared case-insensitively and trimmed, so
+  `Example.com` and `example.com` count as the same zone.
+- The token scope is `https://management.azure.com/.default` (single slash), as used
+  by the Azure SDK itself.
+
+### Changed
+
+- Python 3.10 or newer is required (was 3.9). certbot 5.x needs 3.10, and on 3.9 pip
+  silently fell back to certbot 3.x.
+- `AzureGermanCloud` is no longer accepted as `dns_azure_environment`; Microsoft closed
+  that cloud in 2021.
+- One `DnsManagementClient` per subscription and credential set is reused instead of
+  a new client and HTTP session for every record operation.
+- Documentation: troubleshooting entry for managed identities behind a proxy
+  (`NO_PROXY=169.254.169.254`, terricain/certbot-dns-azure#54); the inherited snap
+  packaging files are removed, this fork never published a snap.
+
+### CI
+
+- Unit tests run on Python 3.10 to 3.13, against certbot 3.x and the latest release,
+  and against both `azure-mgmt-dns` lines (8.x and 9.x).
+- The Azure integration test (real certificate issuance against dedicated test zones)
+  is a required check for pull requests that change code, runs on release tags and
+  once a week against the latest certbot and Azure SDK releases; it retries transient
+  ACME errors and keeps the certbot log as an artifact on failure.
+- `main` is protected and only changes via pull request; Dependabot keeps the GitHub
+  Actions current.
 
 ## 2.7.0 (2026-09-04)
 

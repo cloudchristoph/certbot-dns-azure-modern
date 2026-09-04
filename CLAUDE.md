@@ -69,7 +69,7 @@ Smoke test in the Nginx Proxy Manager image (this is the primary consumer):
 ```bash
 docker run --rm -v "$PWD/dist:/dist:ro" --entrypoint bash jc21/nginx-proxy-manager:2.15.1 -c '
   . /opt/certbot/bin/activate
-  pip install --no-cache-dir "certbot-dns-azure-modern~=2.7.0" --find-links /dist
+  pip install --no-cache-dir "certbot-dns-azure-modern~=2.8.0" --find-links /dist
   pip check && certbot --version && certbot plugins --text | grep -A1 dns-azure'
 ```
 
@@ -128,7 +128,7 @@ pytest -rA azure_tests/
    version heading with the date).
 2. Open a pull request for the bump (`main` cannot be pushed directly), wait for the
    checks, merge.
-3. Tag with the bare version (`git tag 2.7.0 && git push origin 2.7.0`). The build job
+3. Tag with the bare version (`git tag 2.8.0 && git push origin 2.8.0`). The build job
    fails if tag and `setup.py` version differ.
 4. The publish job needs the GitHub environment `pypi` and a PyPI trusted publisher for
    this repo/workflow/environment. Both are set up by Christoph in the web UIs, not by
@@ -141,7 +141,7 @@ Nginx Proxy Manager installs plugins with
 `backend/certbot/dns-plugins.json`. Target entry for an upstream PR:
 
 ```json
-"azure": { "dependencies": "", "package_name": "certbot-dns-azure-modern", "version": "~=2.7.0" }
+"azure": { "dependencies": "", "package_name": "certbot-dns-azure-modern", "version": "~=2.8.0" }
 ```
 
 Users can override that file until the PR lands (bind-mount a patched copy over
