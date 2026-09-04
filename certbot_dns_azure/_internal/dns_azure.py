@@ -32,7 +32,8 @@ class Authenticator(dns_common.DNSAuthenticator):
         super(Authenticator, self).__init__(*args, **kwargs)
         self.credential = None
         self.domain_zoneid = {}  # type: Dict[str, str]
-        # zone -> name of the credential set that owns it ('' for the top level)
+        # zone -> name of the credential set used for it: the [section] it is mapped in
+        # when that section has credentials of its own, otherwise '' (the top level)
         self.domain_scope = {}  # type: Dict[str, str]
         # credential set name -> TokenCredential, created on first use
         self._scope_credentials = {}  # type: Dict[str, object]
@@ -258,31 +259,28 @@ class Authenticator(dns_common.DNSAuthenticator):
         * The relative validation record name (or if explicitly overrided with an ID, an alternate record name)
         * If the validation record can be deleted, if its explicitly overrided, it wont be deleted but set to `-`
         """
-        try:
-            azure_dns_domain = self._match_zone(domain)
-            if azure_dns_domain is not None:
-                    zone_id = self.domain_zoneid[azure_dns_domain]
-
-                    try:
-                        resource = self.parse_azure_resource_id(zone_id)
-                    except ValueError as exc:
-                        raise errors.PluginError('Failed to parse resource ID for {}: {}'
-                                                 .format(domain, zone_id)) from exc
-                    subscription_id = resource.get('subscriptions')
-                    rg_name = resource.get('resourceGroups')
-                    if 'dnsZones' in resource:  # If we're manually specifying an alternate zone to use, override.
-                        azure_dns_domain = resource.get('dnsZones')
-                    relative_validation_name = self._get_relative_domain(validation_name, azure_dns_domain)
-                    can_delete = True
-                    if 'TXT' in resource:  # If we're explicitly specifing a destination record, use instead.
-                        relative_validation_name = resource.get('TXT')
-                        can_delete = False  # If we're specifying a specific record, dont delete it
-
-                    return azure_dns_domain, subscription_id, rg_name, relative_validation_name, can_delete
+        azure_dns_domain = self._match_zone(domain)
+        if azure_dns_domain is None:
             raise errors.PluginError('Domain {} does not have a valid domain to '
                                      'resource group id mapping'.format(domain))
-        except IndexError:
-            raise errors.PluginError('Domain {} has an invalid resource group id'.format(domain))
+        zone_id = self.domain_zoneid[azure_dns_domain]
+
+        try:
+            resource = self.parse_azure_resource_id(zone_id)
+        except ValueError as exc:
+            raise errors.PluginError('Failed to parse resource ID for {}: {}'
+                                     .format(domain, zone_id)) from exc
+        subscription_id = resource.get('subscriptions')
+        rg_name = resource.get('resourceGroups')
+        if 'dnsZones' in resource:  # An explicit zone id overrides the zone derived from the domain
+            azure_dns_domain = resource.get('dnsZones')
+        relative_validation_name = self._get_relative_domain(validation_name, azure_dns_domain)
+        can_delete = True
+        if 'TXT' in resource:  # An explicit record id names the destination record
+            relative_validation_name = resource.get('TXT')
+            can_delete = False  # a record configured by the user is emptied, not deleted
+
+        return azure_dns_domain, subscription_id, rg_name, relative_validation_name, can_delete
 
     def _match_zone(self, domain: str):
         """The configured zone that serves ``domain``, or None.

@@ -31,7 +31,7 @@ import os
 import subprocess
 import time
 import uuid
-from typing import TYPE_CHECKING, Dict, List, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 import pytest
 from azure.mgmt.dns import DnsManagementClient
@@ -147,7 +147,7 @@ def cert_sans(cert_path: 'pathlib.Path') -> List[str]:
     return san.get_values_for_type(x509.DNSName)
 
 
-def create_config(tmpdir: 'pathlib.Path', zones: List[str], sections: Dict[str, List[str]] = None) -> str:
+def create_config(tmpdir: 'pathlib.Path', zones: List[str], sections: Optional[Dict[str, List[str]]] = None) -> str:
     """
     Creates a config file for certbot azure dns
 
