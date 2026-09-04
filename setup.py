@@ -29,10 +29,10 @@ setup(
     description="Azure DNS Authenticator plugin for Certbot (maintained fork of certbot-dns-azure)",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url='https://github.com/cloudchristoph/certbot-dns-azure',
+    url='https://github.com/cloudchristoph/certbot-dns-azure-modern',
     project_urls={
-        'Source': 'https://github.com/cloudchristoph/certbot-dns-azure',
-        'Issues': 'https://github.com/cloudchristoph/certbot-dns-azure/issues',
+        'Source': 'https://github.com/cloudchristoph/certbot-dns-azure-modern',
+        'Issues': 'https://github.com/cloudchristoph/certbot-dns-azure-modern/issues',
         'Upstream': 'https://github.com/terricain/certbot-dns-azure',
     },
     author="Terri Cain",

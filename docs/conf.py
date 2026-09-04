@@ -47,7 +47,7 @@ html_title = f'{project} {release}'
 html_context = {
     'display_github': True,
     'github_user': 'cloudchristoph',
-    'github_repo': 'certbot-dns-azure',
+    'github_repo': 'certbot-dns-azure-modern',
     'github_version': 'main',
     'conf_py_path': '/docs/',
 }

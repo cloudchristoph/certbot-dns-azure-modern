@@ -1,9 +1,9 @@
 # certbot-dns-azure-modern
 
-[![Tests](https://github.com/cloudchristoph/certbot-dns-azure/actions/workflows/release.yml/badge.svg)](https://github.com/cloudchristoph/certbot-dns-azure/actions)
+[![Tests](https://github.com/cloudchristoph/certbot-dns-azure-modern/actions/workflows/release.yml/badge.svg)](https://github.com/cloudchristoph/certbot-dns-azure-modern/actions)
 [![Version](https://img.shields.io/pypi/v/certbot-dns-azure-modern)](https://pypi.org/project/certbot-dns-azure-modern/)
 [![Python Version](https://img.shields.io/pypi/pyversions/certbot-dns-azure-modern)](https://pypi.org/project/certbot-dns-azure-modern/)
-[![Docs](https://github.com/cloudchristoph/certbot-dns-azure/actions/workflows/docs.yml/badge.svg)](https://cloudchristoph.github.io/certbot-dns-azure/)
+[![Docs](https://github.com/cloudchristoph/certbot-dns-azure-modern/actions/workflows/docs.yml/badge.svg)](https://cloudchristoph.github.io/certbot-dns-azure-modern/)
 
 > **Maintained fork of [terricain/certbot-dns-azure](https://github.com/terricain/certbot-dns-azure).**
 >
@@ -79,6 +79,6 @@ Entry point: dns-azure = certbot_dns_azure._internal.dns_azure:Authenticator
 ...
 ```
 
-Docs and instructions on configuration (config file format, authentication methods, DNS delegation) are at [cloudchristoph.github.io/certbot-dns-azure](https://cloudchristoph.github.io/certbot-dns-azure/).
+Docs and instructions on configuration (config file format, authentication methods, DNS delegation) are at [cloudchristoph.github.io/certbot-dns-azure-modern](https://cloudchristoph.github.io/certbot-dns-azure-modern/).
 
 

@@ -10,7 +10,7 @@ published on PyPI as
 The Python module (``certbot_dns_azure``), the plugin name (``dns-azure``), all
 command-line flags and the config file format are unchanged, so it is a drop-in
 replacement. See the
-`README <https://github.com/cloudchristoph/certbot-dns-azure#readme>`_ for the
+`README <https://github.com/cloudchristoph/certbot-dns-azure-modern#readme>`_ for the
 background and for Nginx Proxy Manager instructions.
 
 Installation

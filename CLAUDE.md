@@ -41,7 +41,7 @@ The plugin code itself works unchanged with certbot 5.x; only the pin was the pr
 - `.github/workflows/release.yml` - test matrix, build, publish on tag via PyPI trusted
   publishing (GitHub environment `pypi`), GitHub release.
 - `.github/workflows/docs.yml` - builds the Sphinx docs (`docs/`) and deploys them to
-  GitHub Pages (https://cloudchristoph.github.io/certbot-dns-azure/) on push to `main`.
+  GitHub Pages (https://cloudchristoph.github.io/certbot-dns-azure-modern/) on push to `main`.
   Pages is configured with source "GitHub Actions"; no Read the Docs project.
 - `snap/`, `snap-requirements.txt` - inherited; this fork does not publish a snap.
 - `Docker/` - inherited minimal image, installs from PyPI.
