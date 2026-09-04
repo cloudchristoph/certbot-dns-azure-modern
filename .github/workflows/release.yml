@@ -99,11 +99,14 @@ jobs:
           python -m pip install --upgrade build twine
           python -m build
           python -m twine check dist/*
-      - name: Tag matches setup.py version
+      - name: Tag matches package version
         if: startsWith(github.ref, 'refs/tags/')
+        # Read the version from the built sdist name; the runner's Python has no setuptools.
         run: |
-          v=$(python setup.py --version)
-          test "$v" = "${GITHUB_REF_NAME}" || { echo "tag ${GITHUB_REF_NAME} != setup.py version $v"; exit 1; }
+          sdist=$(ls dist/*.tar.gz)
+          v=${sdist##*-}; v=${v%.tar.gz}
+          echo "built $sdist -> version $v, tag ${GITHUB_REF_NAME}"
+          test "$v" = "${GITHUB_REF_NAME}" || { echo "tag ${GITHUB_REF_NAME} != package version $v"; exit 1; }
       - uses: actions/upload-artifact@v4
         with:
           name: dist
