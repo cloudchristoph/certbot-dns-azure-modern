@@ -31,13 +31,15 @@ class Authenticator(dns_common.DNSAuthenticator):
     def __init__(self, *args, **kwargs):
         super(Authenticator, self).__init__(*args, **kwargs)
         self.credential = None
-        self.domain_zoneid = {}  # type: Dict[str, str]
+        self.domain_zoneid: Dict[str, str] = {}
         # zone -> name of the credential set used for it: the [section] it is mapped in
         # when that section has credentials of its own, otherwise '' (the top level)
-        self.domain_scope = {}  # type: Dict[str, str]
+        self.domain_scope: Dict[str, str] = {}
         # credential set name -> TokenCredential, created on first use
-        self._scope_credentials = {}  # type: Dict[str, object]
-        self._scope_auth = {}  # type: Dict[str, Dict[str, str]]
+        self._scope_credentials: Dict[str, object] = {}
+        self._scope_auth: Dict[str, Dict[str, object]] = {}
+        # (subscription id, credential) -> DnsManagementClient, one HTTP session per pair
+        self._clients: Dict[Tuple[str, int], DnsManagementClient] = {}
         self.ttl = self._get_ttl()
 
         # Azure Environmental Support
@@ -182,9 +184,11 @@ class Authenticator(dns_common.DNSAuthenticator):
                                          ''.format(confobj.filename))
 
     def _setup_credentials(self):
-        # Alias's dns-azure-credentials -> dns-azure-config
-        if self.config.namespace.dns_azure_credentials:
-            self.config.namespace.dns_azure_config = self.config.namespace.dns_azure_credentials
+        # --dns-azure-credentials is an alias of --dns-azure-config for integrations
+        # that pass the conventional --<plugin>-credentials option
+        credentials_path = self.conf('credentials')
+        if credentials_path:
+            setattr(self.config.namespace, self.dest('config'), credentials_path)
 
         valid_creds = self._configure_credentials(
             'config',
@@ -202,6 +206,7 @@ class Authenticator(dns_common.DNSAuthenticator):
         self.domain_scope = {}
         self._scope_auth = {'': self._read_auth(confobj, mapper)}
         self._scope_credentials = {}
+        self._clients = {}
         for name, section in [('', confobj)] + [(name, confobj[name]) for name in confobj.sections]:
             scope = name
             if name:
@@ -338,127 +343,103 @@ class Authenticator(dns_common.DNSAuthenticator):
         # keep the previous behaviour of stripping the zone name wherever it appears.
         return fqdn.replace(domain, '').strip('.')
 
-    def _perform(self, domain, validation_name, validation, retry_attempt=0):
+    def _perform(self, domain, validation_name, validation):
+        self._with_conflict_retry(domain, 'add', self._write_validation, domain, validation_name, validation)
+
+    def _cleanup(self, domain, validation_name, validation):
+        self._with_conflict_retry(domain, 'remove', self._remove_validation, domain, validation_name, validation)
+
+    MAX_CONFLICT_RETRIES = 10
+
+    def _with_conflict_retry(self, domain, action, operation, *args):
+        """Run ``operation``; on a concurrent modification (HTTP 412) wait and run it again.
+
+        Every attempt re-reads the record set, so the retry merges what the other
+        writer left. A 404 while removing means the record is already gone.
+        """
+        for attempt in range(self.MAX_CONFLICT_RETRIES + 1):
+            try:
+                operation(*args)
+                return
+            except HttpResponseError as err:
+                if err.status_code == 404 and action == 'remove':
+                    return
+                if err.status_code != 412:
+                    raise errors.PluginError('Failed to {} TXT record for domain {}, error: {}'
+                                             .format(action, domain, err)) from err
+                if attempt == self.MAX_CONFLICT_RETRIES:
+                    raise errors.PluginError('Failed to {} TXT record for domain {}, max retries due to '
+                                             'concurrent access exceeded, error: {}'.format(action, domain, err)) from err
+                sleep_secs = random.randint(1, 10)
+                logger.warning("Concurrent access to record %s, sleeping %s seconds, retry attempt: %s",
+                               domain, sleep_secs, attempt + 1)
+                time.sleep(sleep_secs)
+
+    def _read_txt_values(self, client, resource_group_name, zone_name, record_name, domain):
+        """``(etag, values)`` of a TXT record set; ``(None, empty set)`` if it does not exist."""
+        try:
+            existing_rr = client.record_sets.get(
+                resource_group_name=resource_group_name,
+                zone_name=zone_name,
+                relative_record_set_name=record_name,
+                record_type='TXT')
+        except HttpResponseError as err:
+            if err.status_code == 404:
+                return None, set()
+            raise errors.PluginError('Failed to check TXT record for domain '
+                                     '{}, error: {}'.format(domain, err)) from err
+        values = set()
+        for record in existing_rr.txt_records or []:
+            values.update(record.value or [])
+        return existing_rr.etag, values
+
+    def _write_validation(self, domain, validation_name, validation):
         azure_domain, subscription_id, resource_group_name, record_name, _ = self._get_ids_for_domain(
             domain, validation_name)
         client = self._get_azure_client(subscription_id, self._credential_for_domain(domain))
 
-        # Check to see if there are any existing TXT validation record values
-        txt_value = {validation}
-        etag = None
-        try:
-            existing_rr = client.record_sets.get(
-                resource_group_name=resource_group_name,
-                zone_name=azure_domain,
-                relative_record_set_name=record_name,
-                record_type='TXT')
-            etag = existing_rr.etag
-            for record in existing_rr.txt_records or []:
-                for value in record.value or []:
-                    if value == '-':
-                        continue
-                    txt_value.add(value)
-        except HttpResponseError as err:
-            if err.status_code != 404:  # Ignore RR not found
-                raise errors.PluginError('Failed to check TXT record for domain '
-                                         '{}, error: {}'.format(domain, err))
+        # Keep values other certbot runs put there; drop the '-' placeholder of an empty record
+        etag, values = self._read_txt_values(client, resource_group_name, azure_domain, record_name, domain)
+        values.discard('-')
+        values.add(validation)
+        client.record_sets.create_or_update(
+            resource_group_name=resource_group_name,
+            zone_name=azure_domain,
+            relative_record_set_name=record_name,
+            record_type='TXT',
+            # Update only the version we read; when nothing existed, create only if still
+            # nothing exists. Either way a concurrent writer causes a 412 and a retry.
+            if_match=etag,
+            if_none_match=None if etag else '*',
+            parameters=RecordSet(ttl=self.ttl, txt_records=[TxtRecord(value=[v]) for v in values])
+        )
 
-        try:
-            client.record_sets.create_or_update(
-                resource_group_name=resource_group_name,
-                zone_name=azure_domain,
-                relative_record_set_name=record_name,
-                record_type='TXT',
-                # Update only the version we read; when nothing existed, create only if
-                # still nothing exists. Either way a concurrent writer causes a 412 and
-                # the retry below re-reads and merges the values.
-                if_match=etag,
-                if_none_match=None if etag else '*',
-                parameters=RecordSet(ttl=self.ttl, txt_records=[TxtRecord(value=[v]) for v in txt_value])
-            )
-        except HttpResponseError as err:
-            if err.status_code == 412:
-                # There is some parallel access on this record, sleep a random amount and try again.
-                if retry_attempt > 10:
-                    raise errors.PluginError('Failed to add TXT record for domain {}, max retries due to concurrent access exceeded'
-                                             ', error: {}'.format(domain, err))
-                sleep_secs = random.randint(1, 10)
-                retry_attempt += 1
-                logger.warning("Concurrent access to record {}, sleeping {} seconds, retry attempt: {}".format(domain, sleep_secs, retry_attempt))
-                time.sleep(sleep_secs)
-                return self._perform(domain, validation_name, validation, retry_attempt)
-            else:
-                raise errors.PluginError('Failed to add TXT record to domain '
-                                         '{}, error: {}'.format(domain, err))
-
-    def _cleanup(self, domain, validation_name, validation, retry_attempt=0):
-        if not self.domain_zoneid:  # cleanup without a preceding perform in this process
-            self._setup_credentials()
-
+    def _remove_validation(self, domain, validation_name, validation):
         azure_domain, subscription_id, resource_group_name, record_name, can_delete = self._get_ids_for_domain(
             domain, validation_name)
         client = self._get_azure_client(subscription_id, self._credential_for_domain(domain))
 
-        txt_value = set()
-        etag = None
-        try:
-            existing_rr = client.record_sets.get(resource_group_name=resource_group_name,
-                                                 zone_name=azure_domain,
-                                                 relative_record_set_name=record_name,
-                                                 record_type='TXT')
-            etag = existing_rr.etag
-            for record in existing_rr.txt_records or []:
-                txt_value.update(record.value or [])
-        except HttpResponseError as err:
-            if err.status_code != 404:  # Ignore RR not found
-                raise errors.PluginError('Failed to check TXT record for domain '
-                                         '{}, error: {}'.format(domain, err))
-
-        txt_value -= {validation}
-
-        try:
-            if txt_value:
-                client.record_sets.create_or_update(
-                    resource_group_name=resource_group_name,
-                    zone_name=azure_domain,
-                    relative_record_set_name=record_name,
-                    record_type='TXT',
-                    if_match=etag,
-                    parameters=RecordSet(ttl=self.ttl,
-                                         txt_records=[TxtRecord(value=[v]) for v in txt_value])
-                )
-            else:
-                if can_delete:
-                    client.record_sets.delete(
-                        resource_group_name=resource_group_name,
-                        zone_name=azure_domain,
-                        relative_record_set_name=record_name,
-                        if_match=etag,
-                        record_type='TXT'
-                    )
-                else:
-                    client.record_sets.create_or_update(  # We've manually specified a record, so dont delete, set to -
-                        resource_group_name=resource_group_name,
-                        zone_name=azure_domain,
-                        relative_record_set_name=record_name,
-                        if_match=etag,
-                        record_type='TXT',
-                        parameters=RecordSet(ttl=self.ttl, txt_records=[TxtRecord(value=['-'])])
-                    )
-        except HttpResponseError as err:
-            if err.status_code == 412:
-                # There is some parallel access on this record, sleep a random amount and try again.
-                if retry_attempt > 10:
-                    raise errors.PluginError('Failed to remove/empty TXT record for domain {}, max retries due to concurrent access exceeded'
-                                             ', error: {}'.format(domain, err))
-                sleep_secs = random.randint(1, 10)
-                retry_attempt += 1
-                logger.warning("Concurrent access to record {}, sleeping {} seconds, retry attempt: {}".format(domain, sleep_secs, retry_attempt))
-                time.sleep(sleep_secs)
-                return self._cleanup(domain, validation_name, validation, retry_attempt)
-            elif err.status_code != 404:  # Ignore RR not found
-                raise errors.PluginError('Failed to remove/empty TXT record for domain '
-                                         '{}, error: {}'.format(domain, err))
+        etag, values = self._read_txt_values(client, resource_group_name, azure_domain, record_name, domain)
+        values.discard(validation)
+        if not values and can_delete:
+            client.record_sets.delete(
+                resource_group_name=resource_group_name,
+                zone_name=azure_domain,
+                relative_record_set_name=record_name,
+                record_type='TXT',
+                if_match=etag
+            )
+            return
+        if not values:
+            values = {'-'}  # a record the user manages (record override) is emptied, not deleted
+        client.record_sets.create_or_update(
+            resource_group_name=resource_group_name,
+            zone_name=azure_domain,
+            relative_record_set_name=record_name,
+            record_type='TXT',
+            if_match=etag,
+            parameters=RecordSet(ttl=self.ttl, txt_records=[TxtRecord(value=[v]) for v in values])
+        )
 
     def _get_azure_client(self, subscription_id, credential=None):
         """
@@ -472,12 +453,16 @@ class Authenticator(dns_common.DNSAuthenticator):
         """
         if credential is None:
             credential = self.credential
-        # Keyword arguments on purpose: azure-mgmt-dns 8.x takes (credential, subscription_id,
-        # api_version, base_url, ...) positionally, 9.x dropped api_version and takes
-        # (credential, subscription_id, base_url, ...). Keywords work for both.
-        return DnsManagementClient(credential, subscription_id,
-                                   base_url=self._arm_endpoint,
-                                   credential_scopes=[self._arm_endpoint.rstrip('/') + "/.default"])
+        key = (subscription_id, id(credential))
+        if key not in self._clients:
+            # Keyword arguments on purpose: azure-mgmt-dns 8.x takes (credential, subscription_id,
+            # api_version, base_url, ...) positionally, 9.x dropped api_version and takes
+            # (credential, subscription_id, base_url, ...). Keywords work for both.
+            self._clients[key] = DnsManagementClient(
+                credential, subscription_id,
+                base_url=self._arm_endpoint,
+                credential_scopes=[self._arm_endpoint.rstrip('/') + "/.default"])
+        return self._clients[key]
 
     @staticmethod
     def parse_azure_resource_id(resource_id):
