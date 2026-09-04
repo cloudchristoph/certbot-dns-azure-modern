@@ -79,6 +79,12 @@ Entry point: dns-azure = certbot_dns_azure._internal.dns_azure:Authenticator
 ...
 ```
 
-Docs and instructions on configuration (config file format, authentication methods, DNS delegation) are at [cloudchristoph.github.io/certbot-dns-azure-modern](https://cloudchristoph.github.io/certbot-dns-azure-modern/).
+Full documentation is at [cloudchristoph.github.io/certbot-dns-azure-modern](https://cloudchristoph.github.io/certbot-dns-azure-modern/):
+[installation](https://cloudchristoph.github.io/certbot-dns-azure-modern/installation.html),
+[configuration](https://cloudchristoph.github.io/certbot-dns-azure-modern/configuration.html),
+[authentication methods](https://cloudchristoph.github.io/certbot-dns-azure-modern/authentication.html),
+[usage](https://cloudchristoph.github.io/certbot-dns-azure-modern/usage.html),
+[DNS delegation](https://cloudchristoph.github.io/certbot-dns-azure-modern/dns-delegation.html) and
+[troubleshooting](https://cloudchristoph.github.io/certbot-dns-azure-modern/troubleshooting.html).
 
 

@@ -19,8 +19,9 @@ with open("README.md") as f:
     long_description = f.read()
 
 docs_extras = [
-    'Sphinx>=1.0',  # autodoc_member_order = 'bysource', autodoc_default_flags
+    'Sphinx>=7',
     'sphinx_rtd_theme',
+    'myst-parser',  # renders CHANGELOG.md on the docs site
 ]
 
 setup(

@@ -1,7 +1,7 @@
 # Sphinx configuration for certbot-dns-azure-modern.
 #
-# The user documentation is the module docstring of ``certbot_dns_azure``,
-# pulled in via ``automodule`` in index.rst. Built and published to GitHub
+# The user documentation lives in the .rst files next to this file; the changelog
+# page includes ../CHANGELOG.md through myst-parser. Built and published to GitHub
 # Pages by .github/workflows/docs.yml.
 
 import re
@@ -27,13 +27,9 @@ release = _version()
 version = release
 
 extensions = [
-    'sphinx.ext.autodoc',
     'sphinx.ext.intersphinx',
-    'sphinx.ext.viewcode',
+    'myst_parser',
 ]
-
-autodoc_member_order = 'bysource'
-autodoc_default_options = {'show-inheritance': True}
 
 source_suffix = '.rst'
 master_doc = 'index'
@@ -44,6 +40,8 @@ pygments_style = 'sphinx'
 
 html_theme = 'sphinx_rtd_theme'
 html_title = f'{project} {release}'
+html_static_path = ['_static']
+html_css_files = ['custom.css']
 html_context = {
     'display_github': True,
     'github_user': 'cloudchristoph',

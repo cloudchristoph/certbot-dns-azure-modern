@@ -32,8 +32,10 @@ The plugin code itself works unchanged with certbot 5.x; only the pin was the pr
 ## Layout
 
 - `certbot_dns_azure/_internal/dns_azure.py` - the plugin (single file, ~370 lines).
-- `certbot_dns_azure/__init__.py` - module docstring, doubles as the user documentation
-  rendered by Sphinx (`docs/index.rst` uses `automodule`).
+- `certbot_dns_azure/__init__.py` - short module docstring pointing at the docs site.
+- `docs/*.rst` - user documentation (installation, configuration, authentication, usage,
+  DNS delegation, troubleshooting, development); `docs/changelog.rst` includes
+  `CHANGELOG.md` via myst-parser. Build with `sphinx-build -W`, warnings are errors.
 - `tests/dns_azure_test.py` - unit tests, mock the Azure SDK. Use `_dns01_challenge()` and
   `_domain()` helpers; they hide the certbot 5 `domain=` -> `identifier=` deprecation.
 - `azure_tests/integration_test.py` - real certificate issuance (Let's Encrypt staging)

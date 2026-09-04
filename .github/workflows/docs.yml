@@ -6,13 +6,13 @@ on:
       - main
     paths:
       - "docs/**"
-      - "certbot_dns_azure/__init__.py"
+      - "CHANGELOG.md"
       - "setup.py"
       - ".github/workflows/docs.yml"
   pull_request:
     paths:
       - "docs/**"
-      - "certbot_dns_azure/__init__.py"
+      - "CHANGELOG.md"
       - "setup.py"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
