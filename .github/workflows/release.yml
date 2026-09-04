@@ -6,71 +6,119 @@ on:
       - "*"
     tags:
       - "*"
+  pull_request:
 
 jobs:
-    test:
-      name: Test
-      runs-on: ubuntu-latest
-      steps:
-        - uses: actions/checkout@v3
-        - name: Set up Python 3.11
-          uses: actions/setup-python@v4
-          with:
-            python-version: 3.11
-        - name: Install setuptools and 
-          run: | 
-            python -m pip install --upgrade setuptools wheel
-            python -m pip install -r requirements-dev.txt
-        - name: Test
-          run: pytest -rA tests/
+  test:
+    name: Test (py${{ matrix.python }}, ${{ matrix.certbot }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+        certbot: ["certbot"]
+        include:
+          # oldest supported line; acme 3.x still needs pyOpenSSL < 26
+          - python: "3.11"
+            certbot: "'certbot>=3.0,<4.0' 'pyOpenSSL<26'"
+          - python: "3.12"
+            certbot: "'certbot>=3.0,<4.0' 'pyOpenSSL<26'"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          # unquoted on purpose: the matrix value carries its own shell quoting
+          python -m pip install ${{ matrix.certbot }}
+          python -m pip install -r requirements-dev.txt
+          python -m pip check
+      - name: Show resolved versions
+        run: python -m pip list | grep -iE '^(acme|certbot|josepy|pyopenssl|cryptography|azure-mgmt-dns) '
+      - name: Test
+        run: pytest -rA tests/
+      - name: Plugin is discoverable by certbot
+        run: certbot plugins --text | grep -A1 'dns-azure'
 
-    azure_test:
-      name: Azure Test
-      runs-on: ubuntu-latest
-      environment:
-        name: dev.azure
-      permissions:
-        id-token: write
-        contents: read
-      steps:
-        - name: 'Az CLI Login via OIDC'
-          uses: azure/login@v1
-          with:
-            client-id: ${{ secrets.AZURE_CLIENT_ID }}
-            tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-            subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        - uses: actions/checkout@v3
-        - name: Set up Python 3.11
-          uses: actions/setup-python@v4
-          with:
-            python-version: 3.11
-        - name: Install setuptools and
-          run: | 
-            python -m pip install --upgrade setuptools wheel
-            python -m pip install -r requirements-dev.txt
-        - name: Test
-          run: pytest -rA azure_tests/
-          env:
-            EMAIL: ${{ vars.EMAIL }}
-            AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  azure_test:
+    name: Azure Test
+    # Needs an OIDC-federated service principal and a real DNS zone.
+    # Enable by setting the repository variable RUN_AZURE_TESTS=true and the
+    # AZURE_* secrets in the dev.azure environment.
+    if: vars.RUN_AZURE_TESTS == 'true' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment:
+      name: dev.azure
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: 'Az CLI Login via OIDC'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+      - name: Test
+        run: pytest -rA azure_tests/
+        env:
+          EMAIL: ${{ vars.EMAIL }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
 
-    publish:
-      name: Publish
-      if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
-      needs: test
-      runs-on: ubuntu-latest
-      permissions:
-        id-token: write
-      steps:
-        - uses: actions/checkout@v3
-        - name: Set up Python 3.11
-          uses: actions/setup-python@v4
-          with:
-            python-version: 3.11
-        - name: Install setuptools and 
-          run: python -m pip install --upgrade setuptools wheel
-        - name: Build a binary wheel and a source tarball
-          run: python setup.py build sdist bdist_wheel
+  build:
+    name: Build distribution
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --upgrade build twine
+          python -m build
+          python -m twine check dist/*
+      - name: Tag matches setup.py version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          v=$(python setup.py --version)
+          test "$v" = "${GITHUB_REF_NAME}" || { echo "tag ${GITHUB_REF_NAME} != setup.py version $v"; exit 1; }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
 
-        - name: Publish distribution 📦 to PyPI
-          uses: pypa/gh-action-pypi-publish@release/v1
+  publish:
+    name: Publish to PyPI
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/certbot-dns-azure-modern
+    permissions:
+      id-token: write   # PyPI trusted publishing
+      contents: write   # GitHub release
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+      - name: GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

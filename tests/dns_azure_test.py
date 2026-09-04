@@ -16,21 +16,39 @@ from certbot.tests import util as test_util, acme_util
 
 from azure.mgmt.dns.models import RecordSet, TxtRecord
 
+
+def _dns01_challenge(domain):
+    """Build an annotated DNS-01 challenge for ``domain``.
+
+    certbot >= 5 deprecates ``domain=`` in favour of ``identifier=``; older
+    releases only know ``domain=``.
+    """
+    try:
+        from acme import messages
+        return achallenges.KeyAuthorizationAnnotatedChallenge(
+            challb=acme_util.DNS01, account_key=KEY,
+            identifier=messages.Identifier(typ=messages.IDENTIFIER_FQDN, value=domain))
+    except (TypeError, KeyError, AttributeError):
+        return achallenges.KeyAuthorizationAnnotatedChallenge(
+            challb=acme_util.DNS01, domain=domain, account_key=KEY)
+
+
+def _domain(achall):
+    """Domain of an annotated challenge without touching the deprecated ``domain`` attribute."""
+    identifier = getattr(achall, 'identifier', None)
+    return identifier.value if identifier is not None else achall.domain
+
+
 MULTI_DOMAIN = [
-    achallenges.KeyAuthorizationAnnotatedChallenge(
-        challb=acme_util.DNS01, domain='example.com', account_key=KEY),
-    achallenges.KeyAuthorizationAnnotatedChallenge(
-        challb=acme_util.DNS01, domain='example.org', account_key=KEY),
-    achallenges.KeyAuthorizationAnnotatedChallenge(
-        challb=acme_util.DNS01, domain='example.net', account_key=KEY)
+    _dns01_challenge('example.com'),
+    _dns01_challenge('example.org'),
+    _dns01_challenge('example.net'),
 ]
 SINGLE_DOMAIN = [
-    achallenges.KeyAuthorizationAnnotatedChallenge(
-        challb=acme_util.DNS01, domain='example.com', account_key=KEY),
+    _dns01_challenge('example.com'),
 ]
 SUB_DOMAIN = [
-    achallenges.KeyAuthorizationAnnotatedChallenge(
-        challb=acme_util.DNS01, domain='a.b.example.com', account_key=KEY),
+    _dns01_challenge('a.b.example.com'),
 ]
 
 
@@ -100,13 +118,13 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
 
         # Extract zone TXT record name and value
         zone1_req, zone2_req, zone3_req = MULTI_DOMAIN
-        zone1_domain_name = zone1_req.validation_domain_name(zone1_req.domain)
+        zone1_domain_name = zone1_req.validation_domain_name(_domain(zone1_req))
         zone1_relative_record = zone1_domain_name.replace('example.com', '').strip('.')
         zone1_key = zone1_req.validation(zone1_req.account_key)
-        zone2_domain_name = zone2_req.validation_domain_name(zone2_req.domain)
+        zone2_domain_name = zone2_req.validation_domain_name(_domain(zone2_req))
         zone2_relative_record = zone2_domain_name.replace('example.org', '').strip('.')
         zone2_key = zone2_req.validation(zone2_req.account_key)
-        zone3_domain_name = zone3_req.validation_domain_name(zone3_req.domain)
+        zone3_domain_name = zone3_req.validation_domain_name(_domain(zone3_req))
         zone3_relative_record = zone3_domain_name.replace('example.com', '').strip('.')
         zone3_key = zone3_req.validation(zone3_req.account_key)
 
@@ -132,7 +150,7 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
         self.assertEqual(zone2_txt_records[0].value[0], zone2_key)
 
         # Test DNS delegation of example.net to example.com
-        self.assertEqual(zone3_req.domain, "example.net")
+        self.assertEqual(_domain(zone3_req), "example.net")
         self.assertEqual(zone3_call[1]['zone_name'], "example.com")
         self.assertEqual(zone3_call[1]['relative_record_set_name'], zone3_relative_record)
         zone3_txt_records = zone3_call[1]['parameters'].txt_records
@@ -146,7 +164,7 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
 
         # Extract zone TXT record name and value
         zone1_req = SINGLE_DOMAIN[0]
-        zone1_domain_name = zone1_req.validation_domain_name(zone1_req.domain)
+        zone1_domain_name = zone1_req.validation_domain_name(_domain(zone1_req))
         zone1_relative_record = zone1_domain_name.replace('example.com', '').strip('.')
         zone1_key = zone1_req.validation(zone1_req.account_key)
 
@@ -179,7 +197,7 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
 
         # Extract zone TXT record name and value
         zone1_req = SUB_DOMAIN[0]
-        zone1_domain_name = zone1_req.validation_domain_name(zone1_req.domain)
+        zone1_domain_name = zone1_req.validation_domain_name(_domain(zone1_req))
         zone1_key = zone1_req.validation(zone1_req.account_key)
         # example.com is azure zone in config
         relative_record = zone1_domain_name.replace('example.com', '').strip('.')
@@ -204,9 +222,9 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
 
         # Extract zone TXT record name and value
         zone1_req, zone2_req, zone3_req = MULTI_DOMAIN
-        zone1_domain_name = zone1_req.validation_domain_name(zone1_req.domain)
-        zone2_domain_name = zone2_req.validation_domain_name(zone2_req.domain)
-        zone3_domain_name = zone3_req.validation_domain_name(zone3_req.domain)
+        zone1_domain_name = zone1_req.validation_domain_name(_domain(zone1_req))
+        zone2_domain_name = zone2_req.validation_domain_name(_domain(zone2_req))
+        zone3_domain_name = zone3_req.validation_domain_name(_domain(zone3_req))
         zone1_relative_record = zone1_domain_name.replace('example.com', '').strip('.')
         zone2_relative_record = zone2_domain_name.replace('example.org', '').strip('.')
         zone3_relative_record = zone3_domain_name.replace('example.com', '').strip('.')
@@ -239,7 +257,7 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
 
         # Extract zone TXT record name and value
         zone1_req = SINGLE_DOMAIN[0]
-        zone1_domain_name = zone1_req.validation_domain_name(zone1_req.domain)
+        zone1_domain_name = zone1_req.validation_domain_name(_domain(zone1_req))
         zone1_relative_record = zone1_domain_name.replace('example.com', '').strip('.')
         zone1_key = zone1_req.validation(zone1_req.account_key)
 
