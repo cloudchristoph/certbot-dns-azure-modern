@@ -96,15 +96,16 @@ A managed identity obtains its token from the instance metadata service at
 ``169.254.169.254``. That address must be reached directly; the metadata service
 rejects requests that arrive through a proxy (the debug log shows
 ``Header contains 'X-Forwarded-For' are not supported``). If the host uses
-``HTTP_PROXY`` / ``HTTPS_PROXY``, exclude the metadata address:
+``HTTP_PROXY`` / ``HTTPS_PROXY``, add the metadata address to the proxy exceptions
+without dropping the ones already there:
 
 .. code-block:: bash
 
-   export NO_PROXY=169.254.169.254
+   export NO_PROXY="${NO_PROXY:+$NO_PROXY,}169.254.169.254"
 
-Set it in the environment certbot runs in, for a systemd timer via
-``Environment=NO_PROXY=169.254.169.254`` in the service unit. The Azure DNS API calls
-themselves may still go through the proxy.
+Set it in the environment certbot runs in. For a systemd timer, extend the
+``Environment=NO_PROXY=...`` line of the service unit with ``169.254.169.254``. The
+Azure DNS API calls themselves may still go through the proxy.
 
 Validation fails although the record was created
 -------------------------------------------------
