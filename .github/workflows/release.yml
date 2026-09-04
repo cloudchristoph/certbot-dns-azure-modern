@@ -3,10 +3,13 @@ name: Release
 on:
   push:
     branches:
-      - "*"
+      - main
     tags:
       - "*"
   pull_request:
+  schedule:
+    # Weekly run against the latest certbot/azure releases to catch dependency drift.
+    - cron: "0 6 * * 1"
   workflow_dispatch:
 
 jobs:
@@ -43,20 +46,53 @@ jobs:
       - name: Plugin is discoverable by certbot
         run: certbot plugins --text | grep -A1 'dns-azure'
 
+  changes:
+    name: Detect code changes
+    # Decides whether a pull request needs the Azure integration test. Docs-only
+    # changes skip it; a skipped job still satisfies the required status check.
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 0
+      - id: filter
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
+          printf 'Changed files:\n%s\n' "$changed"
+          if printf '%s\n' "$changed" | grep -qE '^(certbot_dns_azure/|azure_tests/|setup\.py|setup\.cfg|requirements-dev\.txt|\.github/workflows/release\.yml)'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
   azure_test:
     name: Azure Test
     # Real certificate issuance (Let's Encrypt staging) against dedicated Azure DNS
     # test zones, see azure_tests/integration_test.py for the expected setup.
     # Enable by setting the repository variable RUN_AZURE_TESTS=true; the
     # environment dev.azure holds the AZURE_* secrets and the DNS variables.
-    # Runs on main, on tags and on manual dispatch, not on every branch push.
-    # Only one run may use the test zones at a time: parallel runs (e.g. a push to
-    # main and a tag push seconds later) delete each other's TXT records.
+    # Runs on pull requests from this repository that touch code (required check
+    # before merge), on tags (the publish job waits for it), weekly and on manual
+    # dispatch. Not on pushes to main: the merged commit was already tested as a
+    # pull request. Fork pull requests have no access to the environment secrets.
+    # Only one run may use the test zones at a time: parallel runs delete each
+    # other's TXT records.
+    needs: changes
     if: >-
       vars.RUN_AZURE_TESTS == 'true' &&
       (github.event_name == 'workflow_dispatch' ||
-       (github.event_name == 'push' &&
-        (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))))
+       github.event_name == 'schedule' ||
+       (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) ||
+       (github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        needs.changes.outputs.code == 'true'))
     concurrency:
       group: azure-tests
       cancel-in-progress: false
