@@ -57,10 +57,6 @@ class Authenticator(dns_common.DNSAuthenticator):
                 "ResourceManagerEndpoint": "https://management.chinacloudapi.cn/",
                 "ActiveDirectoryEndpoint": "https://login.chinacloudapi.cn/"
             },
-            "azuregermancloud": {
-                "ResourceManagerEndpoint": "https://management.microsoftazure.de/",
-                "ActiveDirectoryEndpoint": "https://login.microsoftonline.de/"
-            }
         }
 
     @classmethod

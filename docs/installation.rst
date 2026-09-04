@@ -4,7 +4,7 @@ Installation
 Requirements
 ------------
 
-- Python 3.9 or newer (tested on 3.11 to 3.13).
+- Python 3.10 or newer (tested on 3.10 to 3.13).
 - certbot 3.0 or newer. There is deliberately no upper bound, so the plugin never
   forces pip to downgrade an existing certbot.
 - The Azure SDK packages (``azure-identity``, ``azure-mgmt-dns``, ``azure-core``) are

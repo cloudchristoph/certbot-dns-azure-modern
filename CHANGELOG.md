@@ -19,6 +19,10 @@
   is rejected with a clear message instead of a `ValueError` from the Azure SDK.
 - Zone names in mappings are compared case-insensitively and trimmed, so
   `Example.com` and `example.com` count as the same zone.
+- Python 3.10 or newer is required (was 3.9). certbot 5.x needs 3.10, and on 3.9 pip
+  silently fell back to certbot 3.x. CI now tests 3.10 to 3.13.
+- `AzureGermanCloud` is no longer accepted as `dns_azure_environment`; Microsoft closed
+  that cloud in 2021.
 - Zones can use different credentials: put zones that share an identity into an INI
   section (`[name]`) together with that identity's settings. Sections without
   authentication keys use the top-level credentials. This allows one certificate to
