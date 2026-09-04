@@ -3,12 +3,11 @@ from setuptools import setup
 
 version = '2.7.0'
 
-# azure-mgmt-dns is still the old style SDK, so will change dramatically
-# when they refactor, most notably the credential parts
 install_requires = [
     'azure-identity>=1.19.0',
-    # azure-mgmt-dns 9.x changed the DnsManagementClient constructor, keep 8.x for now
-    'azure-mgmt-dns>=8.2.0,<9.0.0',
+    # 8.x and 9.x are both supported; DnsManagementClient is constructed with keyword
+    # arguments because 9.x changed the positional signature.
+    'azure-mgmt-dns>=8.2.0',
     'azure-core>=1.32.0',
     # No upper bound: the old '<4.0' cap forced pip to downgrade certbot/acme in
     # shared venvs (e.g. Nginx Proxy Manager) and broke certbot on import.

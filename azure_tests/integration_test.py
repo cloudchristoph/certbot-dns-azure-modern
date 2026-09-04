@@ -85,7 +85,8 @@ def azure_dns_client() -> DnsManagementClient:
         )
     else:
         creds = AzureCliCredential(tenant_id=os.environ['AZURE_TENANT_ID'])
-    return DnsManagementClient(creds, SUBSCRIPTION_ID, None, 'https://management.azure.com/', credential_scopes=['https://management.azure.com//.default'])
+    return DnsManagementClient(creds, SUBSCRIPTION_ID, base_url='https://management.azure.com/',
+                               credential_scopes=['https://management.azure.com/.default'])
 
 
 def _record_key(rr) -> Tuple[str, str]:

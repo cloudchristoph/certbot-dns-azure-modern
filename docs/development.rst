@@ -15,7 +15,7 @@ Local setup
    git clone https://github.com/cloudchristoph/certbot-dns-azure-modern.git
    cd certbot-dns-azure-modern
    python -m venv .venv && . .venv/bin/activate
-   pip install certbot 'azure-identity>=1.19.0' 'azure-mgmt-dns>=8.2.0,<9' 'azure-core>=1.32.0' pytest build
+   pip install certbot 'azure-identity>=1.19.0' 'azure-mgmt-dns>=8.2.0' 'azure-core>=1.32.0' pytest build
    pip install --no-deps -e .
 
 Unit tests
@@ -27,9 +27,10 @@ The unit tests mock the Azure SDK and run without any Azure access:
 
    python -m pytest -q tests/ -W error::DeprecationWarning
 
-CI runs them on Python 3.11 to 3.13 against certbot 3.x and the latest release.
-When touching compatibility, also test the oldest supported line locally
-(``certbot>=3.0,<4.0`` together with ``pyOpenSSL<26``).
+CI runs them on Python 3.11 to 3.13 against certbot 3.x and the latest release, and
+against both supported ``azure-mgmt-dns`` lines (8.x and 9.x). When touching
+compatibility, also test the oldest supported line locally (``certbot>=3.0,<4.0``
+together with ``pyOpenSSL<26``, and ``azure-mgmt-dns<9``).
 
 Integration tests
 -----------------

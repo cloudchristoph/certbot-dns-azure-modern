@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Support `azure-mgmt-dns` 9.x and drop the `<9.0.0` pin. 9.x removed the positional
+  `api_version` parameter of `DnsManagementClient`, which made the plugin fail with
+  `TypeError: __init__() takes from 3 to 4 positional arguments but 5 were given`;
+  the client is now constructed with keyword arguments, which works for 8.x and 9.x
+  (terricain/certbot-dns-azure#60, #62).
 - Zone matching now respects label boundaries: a request for `abcxyz.net` no longer
   matches a configured zone `xyz.net`, and the relative record name is derived by
   stripping the zone suffix instead of a substring replace

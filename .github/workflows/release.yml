@@ -27,6 +27,9 @@ jobs:
             certbot: "'certbot>=3.0,<4.0' 'pyOpenSSL<26'"
           - python: "3.12"
             certbot: "'certbot>=3.0,<4.0' 'pyOpenSSL<26'"
+          # previous azure-mgmt-dns line; the default runs resolve to 9.x
+          - python: "3.13"
+            certbot: "certbot 'azure-mgmt-dns<9'"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
