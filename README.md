@@ -22,11 +22,10 @@
 > `pip uninstall certbot-dns-azure && pip install -U certbot certbot-dns-azure-modern`.
 > Installing the fork on top of an existing 2.6.1 does not undo the certbot downgrade.
 
-AzureDNS Authenticator plugin for [Certbot](https://certbot.eff.org/).
-
-This plugin is built from the ground up and follows the development style and life-cycle
-of other `certbot-dns-*` plugins found in the
-[Official Certbot Repository](https://github.com/certbot/certbot). PR is open [here](https://github.com/certbot/certbot/pull/8727) though Certbot is not accepting plugin PR's at the moment.
+Azure DNS authenticator plugin for [Certbot](https://certbot.eff.org/). It follows the
+conventions of the `certbot-dns-*` plugins in the
+[Certbot repository](https://github.com/certbot/certbot); Certbot itself does not take
+third-party plugins, so it is distributed separately.
 
 ## Installation
 
