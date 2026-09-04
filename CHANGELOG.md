@@ -2,9 +2,16 @@
 
 ## Unreleased
 
-- Fix retries, empty Azure TXT record sets, boolean config values, and unknown Azure
-  environments so failures are handled correctly instead of using stale values or
-  raising tracebacks.
+- Boolean config keys (`dns_azure_use_cli_credentials`, `dns_azure_msi_system_assigned`,
+  `dns_azure_use_workload_identity_credentials`) are parsed as booleans. Previously any
+  non-empty value, including `false`, switched the method on, so a service principal
+  next to `dns_azure_use_cli_credentials = false` silently used the Azure CLI login.
+- An unknown `dns_azure_environment` is reported as a configuration error naming the
+  valid values instead of a `KeyError` traceback.
+- Retrying a TXT record update after a concurrent-modification response (HTTP 412)
+  re-resolves the record from the original validation name; the retry previously
+  passed the already relative record name back in.
+- Record sets without TXT values no longer raise `TypeError`.
 - Zones can use different credentials: put zones that share an identity into an INI
   section (`[name]`) together with that identity's settings. Sections without
   authentication keys use the top-level credentials. This allows one certificate to

@@ -95,11 +95,18 @@ class Authenticator(dns_common.DNSAuthenticator):
     def _read_auth(section, mapper):
         """Authentication settings of one config section (top level or ``[name]``)."""
         auth = {key: section.get(mapper(key)) for key in Authenticator.AUTH_KEYS}
-        for key in ('msi_system_assigned', 'use_cli_credentials', 'use_workload_identity_credentials'):
-            value = auth[key]
-            if isinstance(value, str):
-                auth[key] = value.lower() == 'true'
+        for key in Authenticator.AUTH_FLAGS:
+            auth[key] = Authenticator._as_bool(auth[key])
         return auth
+
+    AUTH_FLAGS = ('msi_system_assigned', 'use_cli_credentials', 'use_workload_identity_credentials')
+
+    @staticmethod
+    def _as_bool(value):
+        """INI values are strings; ``false``, ``0``, ``no``, ``off`` and empty mean off."""
+        if isinstance(value, str):
+            return value.strip().lower() in ('1', 'true', 'yes', 'on')
+        return bool(value)
 
     @staticmethod
     def _has_auth(auth):
@@ -160,7 +167,9 @@ class Authenticator(dns_common.DNSAuthenticator):
             endpoints = self._azure_endpoints[self._azure_environment]
         except KeyError as exc:
             raise errors.PluginError(
-                '{}: Unknown Azure environment {!r}'.format(confobj.filename, environment)
+                '{}: Unknown Azure environment {!r}, expected one of {}'.format(
+                    confobj.filename, environment or self._azure_environment,
+                    ', '.join(sorted(self._azure_endpoints)))
             ) from exc
         self._arm_endpoint = endpoints["ResourceManagerEndpoint"]
         self._aad_endpoint = endpoints["ActiveDirectoryEndpoint"]
@@ -341,7 +350,7 @@ class Authenticator(dns_common.DNSAuthenticator):
                 record_type='TXT')
             etag = existing_rr.etag
             for record in existing_rr.txt_records or []:
-                for value in record.value:
+                for value in record.value or []:
                     if value == '-':
                         continue
                     txt_value.add(value)
@@ -391,10 +400,7 @@ class Authenticator(dns_common.DNSAuthenticator):
                                                  record_type='TXT')
             etag = existing_rr.etag
             for record in existing_rr.txt_records or []:
-                for value in record.value:
-                    if value == '-':
-                        continue
-                    txt_value.add(value)
+                txt_value.update(record.value or [])
         except HttpResponseError as err:
             if err.status_code != 404:  # Ignore RR not found
                 raise errors.PluginError('Failed to check TXT record for domain '

@@ -328,16 +328,40 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
         with self.assertRaises(errors.PluginError) as cm:
             self.auth.perform(SINGLE_DOMAIN)
         self.assertIn("Unknown Azure environment 'NotAnAzureCloud'", str(cm.exception))
+        self.assertIn('azurepubliccloud', str(cm.exception))
 
     def test_config_false_boolean_is_not_authentication(self):
         dns_test_common.write({
             'azure_msi_system_assigned': 'false',
-            'azure_use_cli_credentials': 'false',
+            'azure_use_cli_credentials': 'False',
+            'azure_use_workload_identity_credentials': '0',
             'azure_zone1': 'example.com:/subscriptions/c135abce-d87d-48df-936c-15596c6968a5/resourceGroups/dns1',
         }, self.sp_config.azure_config)
         with self.assertRaises(errors.PluginError) as cm:
             self.auth.perform(SINGLE_DOMAIN)
         self.assertIn('No authentication methods have been configured', str(cm.exception))
+
+    def test_config_false_boolean_does_not_override_service_principal(self):
+        # A service principal plus an explicit "false" for the CLI flag must use the SP.
+        dns_test_common.write({
+            'azure_sp_client_id': '912ce44a-0156-4669-ae22-c16a17d34ca5',
+            'azure_sp_client_secret': 'example-client-secret-not-real',
+            'azure_tenant_id': 'ed1090f3-ab18-4b12-816c-599af8a88cf7',
+            'azure_use_cli_credentials': 'false',
+            'azure_zone1': 'example.com:/subscriptions/c135abce-d87d-48df-936c-15596c6968a5/resourceGroups/dns1',
+        }, self.sp_config.azure_config)
+        self.mock_client.record_sets.get.return_value = RecordSet(txt_records=[])
+        self.auth.perform(SINGLE_DOMAIN)
+        args = self.auth._get_azure_credentials.call_args[0]
+        self.assertEqual(args[0], '912ce44a-0156-4669-ae22-c16a17d34ca5')
+        self.assertFalse(args[5])  # use_cli_credentials
+
+    def test_as_bool(self):
+        from certbot_dns_azure._internal.dns_azure import Authenticator
+        for value in ('true', 'True', ' yes ', '1', 'on'):
+            self.assertTrue(Authenticator._as_bool(value), value)
+        for value in ('false', 'no', '0', 'off', '', None, 'maybe'):
+            self.assertFalse(Authenticator._as_bool(value), value)
 
     def test_perform_empty_record_values(self):
         self.mock_client.record_sets.get.return_value = RecordSet(txt_records=None)
@@ -346,7 +370,9 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
         self.assertEqual(call[1]['parameters'].txt_records[0].value[0],
                          SINGLE_DOMAIN[0].validation(SINGLE_DOMAIN[0].account_key))
 
-    def test_cleanup_manual_record_does_not_mix_placeholder(self):
+    def test_cleanup_keeps_placeholder_and_foreign_values(self):
+        # A record the user manages (record override) may hold the '-' placeholder next
+        # to other values; cleanup removes only our own value and leaves the rest.
         self.auth.domain_zoneid = {
             'example.com': '/subscriptions/c135abce-d87d-48df-936c-15596c6968a5/'
                            'resourceGroups/dns1/providers/Microsoft.Network/dnsZones/'
@@ -361,8 +387,8 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
                                return_value=self.mock_credentials):
             self.auth.cleanup(SINGLE_DOMAIN)
         call = self.mock_client.record_sets.create_or_update.call_args
-        values = [record.value[0] for record in call[1]['parameters'].txt_records]
-        self.assertEqual(values, ['manual-value'])
+        values = {record.value[0] for record in call[1]['parameters'].txt_records}
+        self.assertEqual(values, {'-', 'manual-value'})
 
     def test_conflict_retry_reuses_original_validation_name(self):
         conflict = HttpResponseError(message='conflict')
