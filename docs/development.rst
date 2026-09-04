@@ -52,6 +52,11 @@ zone layout (a base zone with static CNAME/TXT records for the delegation tests 
 the delegated ``zone1`` and ``zone2``) is described at the top of
 ``azure_tests/integration_test.py``.
 
+In CI the integration tests are a required check for pull requests that change code
+(documentation-only changes skip them), run again on release tags before publishing,
+and once a week against the latest certbot and Azure SDK releases to catch breaking
+upstream changes early.
+
 Building the docs
 -----------------
 
@@ -67,7 +72,8 @@ Release checklist
 -----------------
 
 1. Bump ``version`` in ``setup.py`` and update ``CHANGELOG.md``.
-2. Merge to ``main`` and wait for the test matrix.
+2. Open a pull request, wait for the checks and merge it; ``main`` only accepts
+   changes through pull requests.
 3. Tag with the bare version (``git tag 2.7.0 && git push origin 2.7.0``). The build
    job refuses a tag that differs from the ``setup.py`` version.
 4. The workflow builds the wheel and sdist, runs the integration tests, publishes to

@@ -96,8 +96,18 @@ the azure/login step output),
 role "DNS Zone Contributor" on `rg-certbot-test` only. GitHub environment `dev.azure`
 carries the AZURE_* ids as secrets and EMAIL / AZURE_DNS_* as variables (tenant,
 subscription and client ids are deliberately not written down in this repo); the repository
-variable `RUN_AZURE_TESTS=true` switches the job on. It runs on `main`, on tags and via
-`workflow_dispatch`; on tags the publish job waits for it.
+variable `RUN_AZURE_TESTS=true` switches the job on. It runs on pull requests from this
+repository that touch code (the `changes` job skips it for docs-only changes), on tags,
+weekly (Monday 06:00 UTC, to catch dependency drift) and via `workflow_dispatch`. It
+does not run on pushes to `main`: the merged commit was already tested as a pull
+request. On tags the publish job waits for it. The federated credential is bound to the
+environment, not to a branch, so any job that uses `environment: dev.azure` can log in.
+
+`main` is protected by the ruleset `protect-main`: changes only via pull request, the
+five `Test (...)` jobs, `Build distribution` and `Azure Test` are required checks (a
+skipped Azure Test counts as passed), no force push, no bypass. Work on `fix/`, `ci/`,
+`docs/` branches and open a pull request. Every pull request gets a GitHub Copilot
+review; wait for it and assess each finding before calling the PR ready.
 
 Locally (`az login` as an account with DNS rights on the resource group):
 
@@ -113,7 +123,8 @@ pytest -rA azure_tests/
 ## Release process
 
 1. Bump `version` in `setup.py` (also `snap/snapcraft.yaml`), update `CHANGELOG.md`.
-2. Commit on `main`, push, wait for the test matrix.
+2. Open a pull request for the bump (`main` cannot be pushed directly), wait for the
+   checks, merge.
 3. Tag with the bare version (`git tag 2.7.0 && git push origin 2.7.0`). The build job
    fails if tag and `setup.py` version differ.
 4. The publish job needs the GitHub environment `pypi` and a PyPI trusted publisher for
