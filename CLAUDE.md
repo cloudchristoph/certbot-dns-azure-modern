@@ -48,7 +48,6 @@ The plugin code itself works unchanged with certbot 5.x; only the pin was the pr
 - `.github/workflows/docs.yml` - builds the Sphinx docs (`docs/`) and deploys them to
   GitHub Pages (https://cloudchristoph.github.io/certbot-dns-azure-modern/) on push to `main`.
   Pages is configured with source "GitHub Actions"; no Read the Docs project.
-- `snap/`, `snap-requirements.txt` - inherited; this fork does not publish a snap.
 - `Docker/` - inherited minimal image, installs from PyPI.
 
 ## Working locally
@@ -125,7 +124,8 @@ pytest -rA azure_tests/
 
 ## Release process
 
-1. Bump `version` in `setup.py` (also `snap/snapcraft.yaml`), update `CHANGELOG.md`.
+1. Bump `version` in `setup.py`, update `CHANGELOG.md` (turn "Unreleased" into the
+   version heading with the date).
 2. Open a pull request for the bump (`main` cannot be pushed directly), wait for the
    checks, merge.
 3. Tag with the bare version (`git tag 2.7.0 && git push origin 2.7.0`). The build job
