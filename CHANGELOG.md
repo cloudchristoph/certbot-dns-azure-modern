@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.7.0 (unreleased)
+## 2.7.0 (2026-09-04)
 
 First release of the maintained fork, published on PyPI as `certbot-dns-azure-modern`.
 The Python package (`certbot_dns_azure`) and the certbot plugin name (`dns-azure`) are
