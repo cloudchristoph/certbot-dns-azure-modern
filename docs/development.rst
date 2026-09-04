@@ -27,7 +27,7 @@ The unit tests mock the Azure SDK and run without any Azure access:
 
    python -m pytest -q tests/ -W error::DeprecationWarning
 
-CI runs them on Python 3.11 to 3.13 against certbot 3.x and the latest release, and
+CI runs them on Python 3.10 to 3.13 against certbot 3.x and the latest release, and
 against both supported ``azure-mgmt-dns`` lines (8.x and 9.x). When touching
 compatibility, also test the oldest supported line locally (``certbot>=3.0,<4.0``
 together with ``pyOpenSSL<26``, and ``azure-mgmt-dns<9``).

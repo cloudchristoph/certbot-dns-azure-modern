@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.11", "3.12", "3.13"]
+        python: ["3.10", "3.11", "3.12", "3.13"]
         certbot: ["certbot"]
         include:
           # oldest supported line; acme 3.x still needs pyOpenSSL < 26

@@ -167,7 +167,6 @@ Value                         Resource Manager endpoint
 ``AzurePublicCloud``          https://management.azure.com/
 ``AzureUSGovernmentCloud``    https://management.usgovcloudapi.net/
 ``AzureChinaCloud``           https://management.chinacloudapi.cn/
-``AzureGermanCloud``          https://management.microsoftazure.de/
 ============================  ==========================================
 
 Protecting the config file
