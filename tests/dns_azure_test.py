@@ -62,6 +62,7 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
 
         # This causes some weird zope errors
         mock.patch("certbot.display.util.notify", lambda x: ...).start()
+        self.addCleanup(mock.patch.stopall)
 
         # Setup config files
         config_files = (
@@ -74,41 +75,12 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
                 'azure_zone3': ('example.net:/subscriptions/99800903-fb14-4992-9aff-12eaf2744622/resourceGroups/dns2'
                                 '/providers/Microsoft.Network/dnsZones/example.com')
             }),
-            ('sp_cert.ini', {
-                'azure_sp_client_id': '912ce44a-0156-4669-ae22-c16a17d34ca5',
-                'azure_sp_client_secret': 'example-client-secret-not-real',
-                'azure_certificate_path': '/path/to/cert.pem',
-                'azure_zone1': 'example.com:/subscriptions/c135abce-d87d-48df-936c-15596c6968a5/resourceGroups/dns1',
-                'azure_zone2': 'example.org:/subscriptions/99800903-fb14-4992-9aff-12eaf2744622/resourceGroups/dns2'
-            }),
-            ('user_assigned_msi.ini', {
-                'azure_msi_client_id': '912ce44a-0156-4669-ae22-c16a17d34ca5',
-                'azure_zone1': 'example.com:/subscriptions/c135abce-d87d-48df-936c-15596c6968a5/resourceGroups/dns1',
-                'azure_zone2': 'example.org:/subscriptions/99800903-fb14-4992-9aff-12eaf2744622/resourceGroups/dns2'
-            }),
-            ('system_msi.ini', {
-                'azure_msi_system_assigned': 'true',
-                'azure_zone1': 'example.com:/subscriptions/c135abce-d87d-48df-936c-15596c6968a5/resourceGroups/dns1',
-                'azure_zone2': 'example.org:/subscriptions/99800903-fb14-4992-9aff-12eaf2744622/resourceGroups/dns2'
-            })
         )
         for file, config in config_files:
             dns_test_common.write(config, os.path.join(self.tempdir, file))
 
         self.sp_config = mock.MagicMock(
-            azure_config=os.path.join(self.tempdir, 'sp.ini'),
-            azure_propagation_seconds=0,
-            azure_ttl=120)
-        self.sp_cert_config = mock.MagicMock(
-            azure_config=os.path.join(self.tempdir, 'sp_cert.ini'),
-            azure_propagation_seconds=0,
-            azure_ttl=120)
-        self.umsi_config = mock.MagicMock(
-            azure_config=os.path.join(self.tempdir, 'user_assigned_msi.ini'),
-            azure_propagation_seconds=0,
-            azure_ttl=120)
-        self.smsi_config = mock.MagicMock(
-            azure_config=os.path.join(self.tempdir, 'system_msi.ini'),
+            azure_credentials=None, azure_config=os.path.join(self.tempdir, 'sp.ini'),
             azure_propagation_seconds=0,
             azure_ttl=120)
 
@@ -179,13 +151,6 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
         self.assertEqual(self.mock_client.record_sets.get.call_count, 1)
         self.assertEqual(self.mock_client.record_sets.create_or_update.call_count, 1)
 
-        #
-        expected = [self.mock_client.record_sets.create_or_update.call(
-            resource_group_name='dns1',
-            zone_name='example.com',
-            relative_record_set_name=zone1_domain_name,
-            parameters=RecordSet(txt_records=[TxtRecord(value=[zone1_key]), TxtRecord(value=['someexistingkey'])])
-        )]
         zone1_call = self.mock_client.record_sets.create_or_update.call_args_list[0]
         self.assertEqual(zone1_call[1]['zone_name'], "example.com")
         self.assertEqual(zone1_call[1]['record_type'], "TXT")
@@ -234,7 +199,8 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
         zone2_relative_record = zone2_domain_name.replace('example.org', '').strip('.')
         zone3_relative_record = zone3_domain_name.replace('example.com', '').strip('.')
 
-        # _attempt_cleanup | pylint: disable=protected-access
+        # certbot runs cleanup only after perform() read the config and set this flag
+        self.auth._setup_credentials()
         self.auth._attempt_cleanup = True
         self.auth.cleanup(MULTI_DOMAIN)
 
@@ -266,7 +232,8 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
         zone1_relative_record = zone1_domain_name.replace('example.com', '').strip('.')
         zone1_key = zone1_req.validation(zone1_req.account_key)
 
-        # _attempt_cleanup | pylint: disable=protected-access
+        # certbot runs cleanup only after perform() read the config and set this flag
+        self.auth._setup_credentials()
         self.auth._attempt_cleanup = True
         self.auth.cleanup(SINGLE_DOMAIN)
 
@@ -502,7 +469,7 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
 
     def test_ttl_from_option(self):
         from certbot_dns_azure._internal.dns_azure import Authenticator
-        config = mock.MagicMock(azure_config=self.sp_config.azure_config,
+        config = mock.MagicMock(azure_credentials=None, azure_config=self.sp_config.azure_config,
                                 azure_propagation_seconds=0, azure_ttl=60)
         auth = Authenticator(config, "azure")
         auth._get_azure_credentials = mock.MagicMock(return_value=self.mock_credentials)
@@ -525,7 +492,7 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
         from certbot_dns_azure._internal.dns_azure import Authenticator
         auth_name = "azure"
         for bad in (0, -5, 'soon'):
-            config = mock.MagicMock(azure_config=self.sp_config.azure_config,
+            config = mock.MagicMock(azure_credentials=None, azure_config=self.sp_config.azure_config,
                                     azure_propagation_seconds=0, azure_ttl=bad)
             with self.assertRaises(errors.PluginError) as cm:
                 Authenticator(config, auth_name)
@@ -555,7 +522,7 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
         config = {k: v for k, v in config.items() if v is not None}  # None override drops the key
         path = os.path.join(self.tempdir, 'sections.ini')
         dns_test_common.write(config, path)
-        auth = Authenticator(mock.MagicMock(azure_config=path, azure_propagation_seconds=0, azure_ttl=120), "azure")
+        auth = Authenticator(mock.MagicMock(azure_credentials=None, azure_config=path, azure_propagation_seconds=0, azure_ttl=120), "azure")
         # one distinct credential object per client id
         auth._get_azure_credentials = mock.MagicMock(
             side_effect=lambda client_id, *a, **kw: mock.MagicMock(name='cred-' + str(client_id)))
