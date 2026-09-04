@@ -33,7 +33,8 @@ The plugin code itself works unchanged with certbot 5.x; only the pin was the pr
   rendered by Sphinx (`docs/index.rst` uses `automodule`).
 - `tests/dns_azure_test.py` - unit tests, mock the Azure SDK. Use `_dns01_challenge()` and
   `_domain()` helpers; they hide the certbot 5 `domain=` -> `identifier=` deprecation.
-- `azure_tests/integration_test.py` - real Azure DNS test, needs an OIDC service principal.
+- `azure_tests/integration_test.py` - real certificate issuance (Let's Encrypt staging)
+  against dedicated Azure DNS test zones, see "Azure integration tests" below.
 - `.github/workflows/release.yml` - test matrix, build, publish on tag via PyPI trusted
   publishing (GitHub environment `pypi`), GitHub release.
 - `.github/workflows/docs.yml` - builds the Sphinx docs (`docs/`) and deploys them to
@@ -67,6 +68,41 @@ docker run --rm -v "$PWD/dist:/dist:ro" --entrypoint bash jc21/nginx-proxy-manag
 
 Expected: certbot stays at the image version (5.6.0 in 2.15.1), `pip check` clean,
 `dns-azure` listed.
+
+## Azure integration tests
+
+Dedicated infrastructure in subscription "VS CloudChristoph", resource
+group `rg-certbot-test`, base domain `certbot-test.aznethorizon.com` (delegated with one NS
+record from the production zone `aznethorizon.com` in `rg-dns-zones`). Zones: `zone1`,
+`zone2`, `del1`, `del2` below the base domain; `del1` holds the static CNAME/TXT records
+for the delegation tests. Never point the tests at a production zone.
+
+Safety rules baked into the test module: it refuses to run unless the base domain starts
+with `certbot-test.`, and cleanup only deletes `_acme-challenge*` TXT records that did not
+exist before the test. Do not reintroduce the upstream "delete everything but NS/SOA"
+cleanup.
+
+CI identity: app registration `sp-certbot-dns-azure-ci` with a
+federated credential for the GitHub environment `dev.azure` (note: GitHub puts the
+numeric owner/repo ids into the OIDC subject claim, `repo:<owner>@<id>/<repo>@<id>:environment:dev.azure`;
+a plain `repo:owner/name:...` subject fails with AADSTS700213, take the exact subject from
+the azure/login step output),
+role "DNS Zone Contributor" on `rg-certbot-test` only. GitHub environment `dev.azure`
+carries the AZURE_* ids as secrets and EMAIL / AZURE_DNS_* as variables (tenant,
+subscription and client ids are deliberately not written down in this repo); the repository
+variable `RUN_AZURE_TESTS=true` switches the job on. It runs on `main`, on tags and via
+`workflow_dispatch`; on tags the publish job waits for it.
+
+Locally (`az login` as an account with DNS rights on the resource group):
+
+```bash
+export AZURE_TENANT_ID=$(az account show --query tenantId -o tsv) \
+       AZURE_SUBSCRIPTION_ID=$(az account show --query id -o tsv) \
+       AZURE_DNS_RESOURCE_GROUP=rg-certbot-test \
+       AZURE_DNS_TEST_DOMAIN=certbot-test.aznethorizon.com \
+       EMAIL=me@cvollmann.de
+pytest -rA azure_tests/
+```
 
 ## Release process
 

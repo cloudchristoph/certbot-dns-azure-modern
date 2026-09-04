@@ -7,6 +7,7 @@ on:
     tags:
       - "*"
   pull_request:
+  workflow_dispatch:
 
 jobs:
   test:
@@ -44,10 +45,16 @@ jobs:
 
   azure_test:
     name: Azure Test
-    # Needs an OIDC-federated service principal and a real DNS zone.
-    # Enable by setting the repository variable RUN_AZURE_TESTS=true and the
-    # AZURE_* secrets in the dev.azure environment.
-    if: vars.RUN_AZURE_TESTS == 'true' && github.event_name == 'push'
+    # Real certificate issuance (Let's Encrypt staging) against dedicated Azure DNS
+    # test zones, see azure_tests/integration_test.py for the expected setup.
+    # Enable by setting the repository variable RUN_AZURE_TESTS=true; the
+    # environment dev.azure holds the AZURE_* secrets and the DNS variables.
+    # Runs on main, on tags and on manual dispatch, not on every branch push.
+    if: >-
+      vars.RUN_AZURE_TESTS == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'push' &&
+        (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))))
     runs-on: ubuntu-latest
     environment:
       name: dev.azure
@@ -74,6 +81,9 @@ jobs:
         env:
           EMAIL: ${{ vars.EMAIL }}
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_DNS_RESOURCE_GROUP: ${{ vars.AZURE_DNS_RESOURCE_GROUP }}
+          AZURE_DNS_TEST_DOMAIN: ${{ vars.AZURE_DNS_TEST_DOMAIN }}
 
   build:
     name: Build distribution
@@ -101,8 +111,14 @@ jobs:
 
   publish:
     name: Publish to PyPI
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: build
+    # On a tag, wait for the Azure test as well; a skipped Azure test (variable
+    # not set) does not block the release, a failed one does.
+    if: >-
+      !cancelled() &&
+      startsWith(github.ref, 'refs/tags/') &&
+      needs.build.result == 'success' &&
+      needs.azure_test.result != 'failure'
+    needs: [build, azure_test]
     runs-on: ubuntu-latest
     environment:
       name: pypi
