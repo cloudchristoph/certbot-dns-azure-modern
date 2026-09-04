@@ -75,7 +75,7 @@ Release checklist
 1. Bump ``version`` in ``setup.py`` and update ``CHANGELOG.md``.
 2. Open a pull request, wait for the checks and merge it; ``main`` only accepts
    changes through pull requests.
-3. Tag with the bare version (``git tag 2.7.0 && git push origin 2.7.0``). The build
+3. Tag with the bare version (``git tag 2.8.0 && git push origin 2.8.0``). The build
    job refuses a tag that differs from the ``setup.py`` version.
 4. The workflow builds the wheel and sdist, runs the integration tests, publishes to
    PyPI via trusted publishing and creates the GitHub release.

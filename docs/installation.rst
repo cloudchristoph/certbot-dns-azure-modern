@@ -56,7 +56,7 @@ Until the fork is referenced there upstream, override the ``azure`` entry:
       "azure": {
         "dependencies": "",
         "package_name": "certbot-dns-azure-modern",
-        "version": "~=2.7.0"
+        "version": "~=2.8.0"
       }
 
 3. Bind-mount the patched copy over the original and recreate the container, for

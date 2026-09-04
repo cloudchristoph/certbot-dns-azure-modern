@@ -45,7 +45,7 @@ and recreate the container, so the plugin is installed into a fresh certbot venv
 "azure": {
   "dependencies": "",
   "package_name": "certbot-dns-azure-modern",
-  "version": "~=2.7.0"
+  "version": "~=2.8.0"
 }
 ```
 
