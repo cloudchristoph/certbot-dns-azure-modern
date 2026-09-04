@@ -16,8 +16,9 @@ name (`dns-azure`), CLI flags and config format are unchanged on purpose: downst
 - Keep the plugin a drop-in replacement. Do not rename the module or the entry point.
 - Keep `certbot` unbounded above (`certbot>=3.0`). An upper cap is exactly what broke
   upstream: pip downgraded certbot/acme inside shared venvs.
-- Keep `azure-mgmt-dns<9.0.0` until `_get_azure_client()` is adapted to the 9.x
-  `DnsManagementClient` constructor (upstream issues #58, #62, #64).
+- `azure-mgmt-dns` 8.x and 9.x are both supported. Construct `DnsManagementClient` with
+  keyword arguments only (`base_url=`, `credential_scopes=`); 9.x dropped the positional
+  `api_version` parameter, which is what broke upstream (issues #60, #62).
 
 ## Why this fork exists
 
@@ -54,7 +55,7 @@ The plugin code itself works unchanged with certbot 5.x; only the pin was the pr
 
 ```bash
 uv venv --python 3.13 .venv && . .venv/bin/activate
-uv pip install certbot 'azure-identity>=1.19.0' 'azure-mgmt-dns>=8.2.0,<9' 'azure-core>=1.32.0' pytest build twine
+uv pip install certbot 'azure-identity>=1.19.0' 'azure-mgmt-dns>=8.2.0' 'azure-core>=1.32.0' pytest build twine
 uv pip install --no-deps -e .
 python -m pytest -q tests/ -W error::DeprecationWarning
 python -m build && python -m twine check dist/*
@@ -62,7 +63,7 @@ uv pip install -r docs/requirements.txt && sphinx-build -W -b html docs docs/_bu
 ```
 
 Also test the oldest supported line: `certbot>=3.0,<4.0` together with `pyOpenSSL<26`
-(acme 3.x needs it).
+(acme 3.x needs it), and `azure-mgmt-dns<9` next to the current 9.x.
 
 Smoke test in the Nginx Proxy Manager image (this is the primary consumer):
 
