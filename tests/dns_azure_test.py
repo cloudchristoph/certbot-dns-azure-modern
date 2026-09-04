@@ -15,6 +15,7 @@ from certbot.plugins.dns_test_common import KEY
 from certbot.tests import util as test_util, acme_util
 
 from azure.mgmt.dns.models import RecordSet, TxtRecord
+from azure.core.exceptions import HttpResponseError
 
 
 def _dns01_challenge(domain):
@@ -315,6 +316,68 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
         with self.assertRaises(errors.PluginError) as cm:
             self.auth.perform(SINGLE_DOMAIN)
         self.assertIn('DNS Zone mapping is not in the format', cm.exception.args[0])
+
+    def test_config_unknown_environment(self):
+        dns_test_common.write({
+            'azure_sp_client_id': '912ce44a-0156-4669-ae22-c16a17d34ca5',
+            'azure_sp_client_secret': 'example-client-secret-not-real',
+            'azure_tenant_id': 'ed1090f3-ab18-4b12-816c-599af8a88cf7',
+            'azure_environment': 'NotAnAzureCloud',
+            'azure_zone1': 'example.com:/subscriptions/c135abce-d87d-48df-936c-15596c6968a5/resourceGroups/dns1',
+        }, self.sp_config.azure_config)
+        with self.assertRaises(errors.PluginError) as cm:
+            self.auth.perform(SINGLE_DOMAIN)
+        self.assertIn("Unknown Azure environment 'NotAnAzureCloud'", str(cm.exception))
+
+    def test_config_false_boolean_is_not_authentication(self):
+        dns_test_common.write({
+            'azure_msi_system_assigned': 'false',
+            'azure_use_cli_credentials': 'false',
+            'azure_zone1': 'example.com:/subscriptions/c135abce-d87d-48df-936c-15596c6968a5/resourceGroups/dns1',
+        }, self.sp_config.azure_config)
+        with self.assertRaises(errors.PluginError) as cm:
+            self.auth.perform(SINGLE_DOMAIN)
+        self.assertIn('No authentication methods have been configured', str(cm.exception))
+
+    def test_perform_empty_record_values(self):
+        self.mock_client.record_sets.get.return_value = RecordSet(txt_records=None)
+        self.auth.perform(SINGLE_DOMAIN)
+        call = self.mock_client.record_sets.create_or_update.call_args
+        self.assertEqual(call[1]['parameters'].txt_records[0].value[0],
+                         SINGLE_DOMAIN[0].validation(SINGLE_DOMAIN[0].account_key))
+
+    def test_cleanup_manual_record_does_not_mix_placeholder(self):
+        self.auth.domain_zoneid = {
+            'example.com': '/subscriptions/c135abce-d87d-48df-936c-15596c6968a5/'
+                           'resourceGroups/dns1/providers/Microsoft.Network/dnsZones/'
+                           'example.com/TXT/other'
+        }
+        validation = SINGLE_DOMAIN[0].validation(SINGLE_DOMAIN[0].account_key)
+        self.mock_client.record_sets.get.return_value = RecordSet(txt_records=[
+            TxtRecord(value=['-', validation, 'manual-value'])
+        ])
+        self.auth._attempt_cleanup = True
+        with mock.patch.object(self.auth, '_credential_for_domain',
+                               return_value=self.mock_credentials):
+            self.auth.cleanup(SINGLE_DOMAIN)
+        call = self.mock_client.record_sets.create_or_update.call_args
+        values = [record.value[0] for record in call[1]['parameters'].txt_records]
+        self.assertEqual(values, ['manual-value'])
+
+    def test_conflict_retry_reuses_original_validation_name(self):
+        conflict = HttpResponseError(message='conflict')
+        conflict.status_code = 412
+        request = SINGLE_DOMAIN[0]
+        validation_name = request.validation_domain_name(_domain(request))
+        self.mock_client.record_sets.get.return_value = RecordSet(txt_records=[])
+        self.mock_client.record_sets.create_or_update.side_effect = [conflict, None]
+
+        with mock.patch('certbot_dns_azure._internal.dns_azure.time.sleep'):
+            with mock.patch.object(self.auth, '_get_ids_for_domain',
+                                   wraps=self.auth._get_ids_for_domain) as get_ids:
+                self.auth.perform(SINGLE_DOMAIN)
+        self.assertEqual([call.args for call in get_ids.call_args_list],
+                         [(_domain(request), validation_name)] * 2)
 
     def test_config_bad_resource_group(self):
         # Test invalid resource group ID
