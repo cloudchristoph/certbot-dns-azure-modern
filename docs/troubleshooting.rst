@@ -89,6 +89,23 @@ Authentication errors (AADSTS codes, ``ClientAuthenticationError``)
 - Sovereign clouds: make sure ``dns_azure_environment`` matches the cloud the
   identity lives in.
 
+``ManagedIdentityCredential authentication unavailable`` behind a proxy
+------------------------------------------------------------------------
+
+A managed identity obtains its token from the instance metadata service at
+``169.254.169.254``. That address must be reached directly; the metadata service
+rejects requests that arrive through a proxy (the debug log shows
+``Header contains 'X-Forwarded-For' are not supported``). If the host uses
+``HTTP_PROXY`` / ``HTTPS_PROXY``, exclude the metadata address:
+
+.. code-block:: bash
+
+   export NO_PROXY=169.254.169.254
+
+Set it in the environment certbot runs in, for a systemd timer via
+``Environment=NO_PROXY=169.254.169.254`` in the service unit. The Azure DNS API calls
+themselves may still go through the proxy.
+
 Validation fails although the record was created
 -------------------------------------------------
 
