@@ -1,0 +1,19 @@
+# Keeps the GitHub Actions used by the workflows current. The plugin's Python
+# dependencies are deliberately version ranges (the plugin has to fit into foreign
+# virtualenvs such as Nginx Proxy Manager), so they are not managed here; the weekly
+# workflow run tests against whatever pip resolves today.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "ci"

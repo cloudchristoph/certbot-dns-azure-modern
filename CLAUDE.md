@@ -42,6 +42,8 @@ The plugin code itself works unchanged with certbot 5.x; only the pin was the pr
   against dedicated Azure DNS test zones, see "Azure integration tests" below.
 - `.github/workflows/release.yml` - test matrix, build, publish on tag via PyPI trusted
   publishing (GitHub environment `pypi`), GitHub release.
+- `.github/dependabot.yml` - weekly grouped updates of the GitHub Actions only; the
+  Python dependencies stay version ranges and are covered by the weekly workflow run.
 - `.github/workflows/docs.yml` - builds the Sphinx docs (`docs/`) and deploys them to
   GitHub Pages (https://cloudchristoph.github.io/certbot-dns-azure-modern/) on push to `main`.
   Pages is configured with source "GitHub Actions"; no Read the Docs project.
