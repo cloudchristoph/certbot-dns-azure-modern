@@ -50,11 +50,16 @@ jobs:
     # Enable by setting the repository variable RUN_AZURE_TESTS=true; the
     # environment dev.azure holds the AZURE_* secrets and the DNS variables.
     # Runs on main, on tags and on manual dispatch, not on every branch push.
+    # Only one run may use the test zones at a time: parallel runs (e.g. a push to
+    # main and a tag push seconds later) delete each other's TXT records.
     if: >-
       vars.RUN_AZURE_TESTS == 'true' &&
       (github.event_name == 'workflow_dispatch' ||
        (github.event_name == 'push' &&
         (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))))
+    concurrency:
+      group: azure-tests
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     environment:
       name: dev.azure
