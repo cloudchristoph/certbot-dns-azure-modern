@@ -121,13 +121,21 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
       - name: Test
-        run: pytest -rA azure_tests/
+        run: pytest -rA --basetemp="$RUNNER_TEMP/azure-tests" azure_tests/
         env:
           EMAIL: ${{ vars.EMAIL }}
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           AZURE_DNS_RESOURCE_GROUP: ${{ vars.AZURE_DNS_RESOURCE_GROUP }}
           AZURE_DNS_TEST_DOMAIN: ${{ vars.AZURE_DNS_TEST_DOMAIN }}
+      - name: Keep certbot logs of failed runs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: azure-test-certbot-logs
+          path: ${{ runner.temp }}/azure-tests/**/letsencrypt.log
+          if-no-files-found: ignore
+          retention-days: 14
 
   build:
     name: Build distribution
