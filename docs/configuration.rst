@@ -14,6 +14,8 @@ The plugin adds the following options to certbot. They are also accepted in
                                         Nginx Proxy Manager.
 ``--dns-azure-propagation-seconds``     Seconds to wait after creating the TXT record before
                                         asking the ACME server to validate. Default: 10.
+``--dns-azure-ttl``                     TTL in seconds of the ``_acme-challenge`` TXT record
+                                        the plugin creates. Default: 120.
 ======================================  ========================================================
 
 Select the plugin with ``--authenticator dns-azure`` (or ``-a dns-azure``).

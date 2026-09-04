@@ -88,7 +88,7 @@ For every name in the certificate request the plugin
 1. picks the matching zone mapping from the config file (longest matching domain
    wins, see :doc:`configuration`),
 2. creates or updates the TXT record set ``_acme-challenge.<name>`` in that zone
-   with the validation token and a TTL of 120 seconds; existing values in the
+   with the validation token and a TTL of 120 seconds (``--dns-azure-ttl``); existing values in the
    record set are preserved, so several certbot runs against the same name can
    overlap,
 3. waits for the propagation time and lets certbot complete the challenge,

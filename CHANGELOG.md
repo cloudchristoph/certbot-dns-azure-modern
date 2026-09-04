@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- New option `--dns-azure-ttl` sets the TTL of the `_acme-challenge` TXT records; the
+  default stays 120 seconds (terricain/certbot-dns-azure#48).
 - Support `azure-mgmt-dns` 9.x and drop the `<9.0.0` pin. 9.x removed the positional
   `api_version` parameter of `DnsManagementClient`, which made the plugin fail with
   `TypeError: __init__() takes from 3 to 4 positional arguments but 5 were given`;
