@@ -26,12 +26,13 @@ class Authenticator(dns_common.DNSAuthenticator):
 
     description = ('Obtain certificates using a DNS TXT record (if you are using '
                    'Azure for DNS).')
-    ttl = 120
+    default_ttl = 120
 
     def __init__(self, *args, **kwargs):
         super(Authenticator, self).__init__(*args, **kwargs)
         self.credential = None
         self.domain_zoneid = {}  # type: Dict[str, str]
+        self.ttl = self._get_ttl()
 
         # Azure Environmental Support
         self._azure_environment = getenv("AZURE_ENVIRONMENT", "AzurePublicCloud").lower()
@@ -59,6 +60,22 @@ class Authenticator(dns_common.DNSAuthenticator):
         super(Authenticator, cls).add_parser_arguments(add)
         add('config', help='Azure config INI file.')
         add('credentials', help='Azure config INI file. Fallback for legacy integrations')
+        add('ttl', default=cls.default_ttl, type=int,
+            help='TTL in seconds of the _acme-challenge TXT record.')
+
+    def _get_ttl(self):
+        """TTL for the validation records from ``--dns-azure-ttl``."""
+        ttl = self.conf('ttl')
+        if ttl is None:
+            return self.default_ttl
+        try:
+            ttl = int(ttl)
+        except (TypeError, ValueError) as exc:
+            raise errors.PluginError('--{}-ttl must be a whole number of seconds, got {!r}'
+                                     .format(self.name, ttl)) from exc
+        if ttl < 1:
+            raise errors.PluginError('--{}-ttl must be at least 1 second, got {}'.format(self.name, ttl))
+        return ttl
 
     def more_info(self):  # pylint: disable=missing-function-docstring
         return 'This plugin configures a DNS TXT record to respond to a dns-01 challenge using ' + \

@@ -96,16 +96,20 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
 
         self.sp_config = mock.MagicMock(
             azure_config=os.path.join(self.tempdir, 'sp.ini'),
-            azure_propagation_seconds=0)
+            azure_propagation_seconds=0,
+            azure_ttl=120)
         self.sp_cert_config = mock.MagicMock(
             azure_config=os.path.join(self.tempdir, 'sp_cert.ini'),
-            azure_propagation_seconds=0)
+            azure_propagation_seconds=0,
+            azure_ttl=120)
         self.umsi_config = mock.MagicMock(
             azure_config=os.path.join(self.tempdir, 'user_assigned_msi.ini'),
-            azure_propagation_seconds=0)
+            azure_propagation_seconds=0,
+            azure_ttl=120)
         self.smsi_config = mock.MagicMock(
             azure_config=os.path.join(self.tempdir, 'system_msi.ini'),
-            azure_propagation_seconds=0)
+            azure_propagation_seconds=0,
+            azure_ttl=120)
 
         self.auth = Authenticator(self.sp_config, "azure")
         self.mock_credentials = mock.MagicMock()
@@ -351,6 +355,42 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
         self.assertEqual(self.auth._get_ids_for_domain('abcxyz.net', '_acme-challenge.abcxyz.net')[0], 'abcxyz.net')
         self.assertEqual(self.auth._get_ids_for_domain('a.sub.xyz.net', '_acme-challenge.a.sub.xyz.net')[0], 'sub.xyz.net')
         self.assertEqual(self.auth._get_ids_for_domain('other.xyz.net', '_acme-challenge.other.xyz.net')[0], 'xyz.net')
+
+    def test_ttl_default(self):
+        self.mock_client.record_sets.get.return_value = RecordSet(txt_records=[])
+        self.auth.perform(SINGLE_DOMAIN)
+        call = self.mock_client.record_sets.create_or_update.call_args_list[0]
+        self.assertEqual(call[1]['parameters'].ttl, 120)
+
+    def test_ttl_from_option(self):
+        from certbot_dns_azure._internal.dns_azure import Authenticator
+        config = mock.MagicMock(azure_config=self.sp_config.azure_config,
+                                azure_propagation_seconds=0, azure_ttl=60)
+        auth = Authenticator(config, "azure")
+        auth._get_azure_credentials = mock.MagicMock(return_value=self.mock_credentials)
+        auth._get_azure_client = mock.MagicMock(return_value=self.mock_client)
+        self.mock_client.record_sets.get.return_value = RecordSet(txt_records=[])
+
+        auth.perform(SINGLE_DOMAIN)
+        call = self.mock_client.record_sets.create_or_update.call_args_list[0]
+        self.assertEqual(call[1]['parameters'].ttl, 60)
+
+        # cleanup of a record that still holds another value re-writes it with the same TTL
+        self.mock_client.record_sets.get.return_value = RecordSet(
+            txt_records=[TxtRecord(value=['someexistingkey'])])
+        auth._attempt_cleanup = True
+        auth.cleanup(SINGLE_DOMAIN)
+        call = self.mock_client.record_sets.create_or_update.call_args_list[-1]
+        self.assertEqual(call[1]['parameters'].ttl, 60)
+
+    def test_ttl_invalid(self):
+        from certbot_dns_azure._internal.dns_azure import Authenticator
+        for bad in (0, -5, 'soon'):
+            config = mock.MagicMock(azure_config=self.sp_config.azure_config,
+                                    azure_propagation_seconds=0, azure_ttl=bad)
+            with self.assertRaises(errors.PluginError) as cm:
+                Authenticator(config, "azure")
+            self.assertIn('--azure-ttl must be', cm.exception.args[0])
 
     def test_get_azure_client_uses_keyword_arguments(self):
         # azure-mgmt-dns 9.x dropped the positional api_version parameter; the client
