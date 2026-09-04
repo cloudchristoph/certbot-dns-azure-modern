@@ -6,11 +6,18 @@
   `api_version` parameter of `DnsManagementClient`, which made the plugin fail with
   `TypeError: __init__() takes from 3 to 4 positional arguments but 5 were given`;
   the client is now constructed with keyword arguments, which works for 8.x and 9.x
-  (terricain/certbot-dns-azure#60, #62).
+  (terricain/certbot-dns-azure#60, #62). The token scope is now
+  `https://management.azure.com/.default` (single slash), as used by the Azure SDK
+  itself.
 - Zone matching now respects label boundaries: a request for `abcxyz.net` no longer
   matches a configured zone `xyz.net`, and the relative record name is derived by
   stripping the zone suffix instead of a substring replace
   (terricain/certbot-dns-azure#61).
+- CI: the unit tests run against both `azure-mgmt-dns` lines (8.x and 9.x); the Azure
+  integration test (real certificate issuance) is a required check for pull requests
+  that change code, runs on release tags and once a week against the latest certbot
+  and Azure SDK releases; `main` is protected and only changes via pull request;
+  Dependabot keeps the GitHub Actions current.
 
 ## 2.7.0 (2026-09-04)
 
