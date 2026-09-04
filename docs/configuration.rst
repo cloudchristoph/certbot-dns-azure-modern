@@ -98,10 +98,11 @@ How domains are matched
 ~~~~~~~~~~~~~~~~~~~~~~~
 
 When certbot asks for a certificate for a name, the plugin picks the configured
-``DOMAIN`` that the name ends with, trying the longest configured domain first. One
-mapping for ``example.com`` therefore covers ``www.example.com``,
+``DOMAIN`` that the name equals or is a subdomain of, trying the longest configured
+domain first. One mapping for ``example.com`` therefore covers ``www.example.com``,
 ``*.example.com`` and any deeper subdomain, as long as they are all served from the
-``example.com`` zone.
+``example.com`` zone. Matching happens on label boundaries: ``myexample.com`` is not
+covered by ``example.com`` and needs its own mapping.
 
 If a subdomain is its own zone in Azure (say ``dev.example.com`` is delegated to a
 separate zone), add a mapping for it as well; the longer match wins and the TXT

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Zone matching now respects label boundaries: a request for `abcxyz.net` no longer
+  matches a configured zone `xyz.net`, and the relative record name is derived by
+  stripping the zone suffix instead of a substring replace
+  (terricain/certbot-dns-azure#61).
+
 ## 2.7.0 (2026-09-04)
 
 First release of the maintained fork, published on PyPI as `certbot-dns-azure-modern`.

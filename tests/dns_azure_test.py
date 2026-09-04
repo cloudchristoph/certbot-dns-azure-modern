@@ -324,6 +324,46 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
             self.auth.perform(SINGLE_DOMAIN)
         self.assertIn('Failed to parse resource ID for example.com', cm.exception.args[0])
 
+    def test_zone_match_label_boundary(self):
+        # A zone only matches on a label boundary: 'abcxyz.net' must not be treated as a
+        # subdomain of 'xyz.net' (upstream issue #61).
+        rg = '/subscriptions/c135abce-d87d-48df-936c-15596c6968a5/resourceGroups/dns1'
+        self.auth.domain_zoneid = {'xyz.net': rg}
+
+        zone, _, _, record, _ = self.auth._get_ids_for_domain('sub.xyz.net', '_acme-challenge.sub.xyz.net')
+        self.assertEqual(zone, 'xyz.net')
+        self.assertEqual(record, '_acme-challenge.sub')
+
+        zone, _, _, record, _ = self.auth._get_ids_for_domain('xyz.net', '_acme-challenge.xyz.net')
+        self.assertEqual(zone, 'xyz.net')
+        self.assertEqual(record, '_acme-challenge')
+
+        for name in ('abcxyz.net', 'www.abcxyz.net'):
+            with self.assertRaises(errors.PluginError) as cm:
+                self.auth._get_ids_for_domain(name, '_acme-challenge.' + name)
+            self.assertIn('does not have a valid domain to resource group id mapping', cm.exception.args[0])
+
+    def test_zone_match_prefers_longest(self):
+        # With both zones configured the exact zone wins regardless of config order.
+        rg = '/subscriptions/c135abce-d87d-48df-936c-15596c6968a5/resourceGroups/dns1'
+        self.auth.domain_zoneid = {'xyz.net': rg, 'abcxyz.net': rg, 'sub.xyz.net': rg}
+
+        self.assertEqual(self.auth._get_ids_for_domain('abcxyz.net', '_acme-challenge.abcxyz.net')[0], 'abcxyz.net')
+        self.assertEqual(self.auth._get_ids_for_domain('a.sub.xyz.net', '_acme-challenge.a.sub.xyz.net')[0], 'sub.xyz.net')
+        self.assertEqual(self.auth._get_ids_for_domain('other.xyz.net', '_acme-challenge.other.xyz.net')[0], 'xyz.net')
+
+    def test_get_relative_domain(self):
+        from certbot_dns_azure._internal.dns_azure import Authenticator
+        rel = Authenticator._get_relative_domain
+        self.assertEqual(rel('example.com', 'example.com'), '@')
+        self.assertEqual(rel('_acme-challenge.example.com', 'example.com'), '_acme-challenge')
+        self.assertEqual(rel('_acme-challenge.a.b.example.com', 'example.com'), '_acme-challenge.a.b')
+        # The zone name occurring inside a label must not be stripped
+        self.assertEqual(rel('_acme-challenge.example.com.example.com', 'example.com'), '_acme-challenge.example.com')
+        self.assertEqual(rel('_acme-challenge.Example.COM', 'example.com'), '_acme-challenge')
+        # Delegated validation into a different zone keeps the previous behaviour
+        self.assertEqual(rel('_acme-challenge.example.net', 'example.com'), '_acme-challenge.example.net')
+
 
 if __name__ == "__main__":
     unittest.main()  # pragma: no cover

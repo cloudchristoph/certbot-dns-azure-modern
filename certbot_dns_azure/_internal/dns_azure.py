@@ -189,8 +189,9 @@ class Authenticator(dns_common.DNSAuthenticator):
 
         try:
             for azure_dns_domain in azure_domains:
-                # Look to see if domain ends with key, to cover subdomains
-                if domain.endswith(azure_dns_domain):
+                # Match the zone itself or any subdomain of it. The match must sit on a
+                # label boundary: 'abcxyz.net' is not part of the 'xyz.net' zone.
+                if self._is_domain_or_subdomain(domain, azure_dns_domain):
                     zone_id = self.domain_zoneid[azure_dns_domain]
 
                     try:
@@ -216,9 +217,23 @@ class Authenticator(dns_common.DNSAuthenticator):
             raise errors.PluginError('Domain {} has an invalid resource group id'.format(domain))
 
     @staticmethod
+    def _is_domain_or_subdomain(name: str, zone: str) -> bool:
+        """True if ``name`` is ``zone`` itself or a subdomain of it (label boundary aware)."""
+        name = name.rstrip('.').lower()
+        zone = zone.rstrip('.').lower()
+        return name == zone or name.endswith('.' + zone)
+
+    @staticmethod
     def _get_relative_domain(fqdn: str, domain: str) -> str:
-        if fqdn == domain:
+        """Record name relative to ``domain``; ``@`` for the zone apex."""
+        fqdn = fqdn.rstrip('.')
+        domain = domain.rstrip('.')
+        if fqdn.lower() == domain.lower():
             return '@'
+        if fqdn.lower().endswith('.' + domain.lower()):
+            return fqdn[:-(len(domain) + 1)]
+        # Not below the zone (e.g. an explicit dnsZones override pointing elsewhere):
+        # keep the previous behaviour of stripping the zone name wherever it appears.
         return fqdn.replace(domain, '').strip('.')
 
     def _perform(self, domain, validation_name, validation, retry_attempt=0):
