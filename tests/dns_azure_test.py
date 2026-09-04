@@ -390,6 +390,55 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
         values = {record.value[0] for record in call[1]['parameters'].txt_records}
         self.assertEqual(values, {'-', 'manual-value'})
 
+    def test_create_is_conditional_and_retries_on_conflict(self):
+        # Two certbot runs for the same name: both see no record, the first creates it,
+        # the second must not overwrite it. Creation asks for if_none_match='*', gets a
+        # 412, re-reads the record and merges both values.
+        not_found = HttpResponseError(message='not found')
+        not_found.status_code = 404
+        conflict = HttpResponseError(message='conflict')
+        conflict.status_code = 412
+        request = SINGLE_DOMAIN[0]
+        validation = request.validation(request.account_key)
+        existing = RecordSet(txt_records=[TxtRecord(value=['other-runs-value'])])
+        existing.etag = 'etag-1'
+        self.mock_client.record_sets.get.side_effect = [not_found, existing]
+        self.mock_client.record_sets.create_or_update.side_effect = [conflict, None]
+
+        with mock.patch('certbot_dns_azure._internal.dns_azure.time.sleep'):
+            self.auth.perform(SINGLE_DOMAIN)
+
+        first, second = self.mock_client.record_sets.create_or_update.call_args_list
+        self.assertIsNone(first[1]['if_match'])
+        self.assertEqual(first[1]['if_none_match'], '*')
+        self.assertEqual(second[1]['if_match'], 'etag-1')
+        self.assertIsNone(second[1]['if_none_match'])
+        values = {r.value[0] for r in second[1]['parameters'].txt_records}
+        self.assertEqual(values, {'other-runs-value', validation})
+
+    def test_config_resource_id_without_subscription(self):
+        dns_test_common.write({
+            'azure_sp_client_id': '912ce44a-0156-4669-ae22-c16a17d34ca5',
+            'azure_sp_client_secret': 'example-client-secret-not-real',
+            'azure_tenant_id': 'ed1090f3-ab18-4b12-816c-599af8a88cf7',
+            'azure_zone1': 'example.com:/resourceGroups/dns1',
+        }, self.sp_config.azure_config)
+        with self.assertRaises(errors.PluginError) as cm:
+            self.auth.perform(SINGLE_DOMAIN)
+        self.assertIn('must contain /subscriptions/<id>/resourceGroups/<name>', cm.exception.args[0])
+
+    def test_config_duplicate_zone_case_insensitive(self):
+        dns_test_common.write({
+            'azure_sp_client_id': '912ce44a-0156-4669-ae22-c16a17d34ca5',
+            'azure_sp_client_secret': 'example-client-secret-not-real',
+            'azure_tenant_id': 'ed1090f3-ab18-4b12-816c-599af8a88cf7',
+            'azure_zone1': 'Example.com : /subscriptions/c135abce-d87d-48df-936c-15596c6968a5/resourceGroups/dns1',
+            'azure_zone2': 'example.com:/subscriptions/c135abce-d87d-48df-936c-15596c6968a5/resourceGroups/dns2',
+        }, self.sp_config.azure_config)
+        with self.assertRaises(errors.PluginError) as cm:
+            self.auth.perform(SINGLE_DOMAIN)
+        self.assertIn('zone example.com is mapped more than once', cm.exception.args[0])
+
     def test_conflict_retry_reuses_original_validation_name(self):
         conflict = HttpResponseError(message='conflict')
         conflict.status_code = 412

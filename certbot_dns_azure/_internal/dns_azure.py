@@ -211,7 +211,8 @@ class Authenticator(dns_common.DNSAuthenticator):
                 else:
                     scope = ''  # section without credentials of its own: top-level ones
             for _, value in self._zone_items(section):
-                domain, zone_id = value.split(':', 1)
+                domain, zone_id = (part.strip() for part in value.split(':', 1))
+                domain = domain.lower()  # DNS names are case-insensitive, so is the duplicate check
                 if domain in self.domain_zoneid:
                     raise errors.PluginError('{}: zone {} is mapped more than once'
                                              .format(confobj.filename, domain))
@@ -292,6 +293,9 @@ class Authenticator(dns_common.DNSAuthenticator):
                                      .format(domain, zone_id)) from exc
         subscription_id = resource.get('subscriptions')
         rg_name = resource.get('resourceGroups')
+        if not subscription_id or not rg_name:
+            raise errors.PluginError('Resource ID for {} must contain /subscriptions/<id>/resourceGroups/<name>: {}'
+                                     .format(domain, zone_id))
         if 'dnsZones' in resource:  # An explicit zone id overrides the zone derived from the domain
             azure_dns_domain = resource.get('dnsZones')
         relative_validation_name = self._get_relative_domain(validation_name, azure_dns_domain)
@@ -365,7 +369,11 @@ class Authenticator(dns_common.DNSAuthenticator):
                 zone_name=azure_domain,
                 relative_record_set_name=record_name,
                 record_type='TXT',
+                # Update only the version we read; when nothing existed, create only if
+                # still nothing exists. Either way a concurrent writer causes a 412 and
+                # the retry below re-reads and merges the values.
                 if_match=etag,
+                if_none_match=None if etag else '*',
                 parameters=RecordSet(ttl=self.ttl, txt_records=[TxtRecord(value=[v]) for v in txt_value])
             )
         except HttpResponseError as err:
