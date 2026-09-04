@@ -113,6 +113,44 @@ record is created in the subdomain's zone.
 A name that matches none of the configured domains fails with
 ``Domain <name> does not have a valid domain to resource group id mapping``.
 
+.. _credential-sets:
+
+Several credential sets (zones in different tenants)
+-----------------------------------------------------
+
+One identity is enough as long as it has access to every zone. When zones live in
+different Entra ID tenants, or you want a separate identity per zone, put the zones
+that share an identity into an INI section with that identity's settings:
+
+.. code-block:: ini
+   :caption: /etc/letsencrypt/azure.ini
+
+   dns_azure_sp_client_id = 912ce44a-0156-4669-ae22-c16a17d34ca5
+   dns_azure_sp_client_secret = example-client-secret-not-real
+   dns_azure_tenant_id = ed1090f3-ab18-4b12-816c-599af8a88cf7
+   dns_azure_zone1 = example.com:/subscriptions/c135abce-d87d-48df-936c-15596c6968a5/resourceGroups/dns1
+
+   [partner]
+   dns_azure_sp_client_id = 0d4e2f4c-5b3a-4b8c-9a1e-2f6d7c8b9a0e
+   dns_azure_sp_client_secret = another-secret-not-real
+   dns_azure_tenant_id = 7b1c9e2d-3f4a-4c5b-8d6e-9f0a1b2c3d4e
+   dns_azure_zone1 = partner.example:/subscriptions/99800903-fb14-4992-9aff-12eaf2744622/resourceGroups/dns2
+
+Rules:
+
+- The section name is free; it only labels the credential set in error messages.
+- A section takes the same authentication keys as the top level, so every method from
+  :doc:`authentication` works per section, including managed identities and the Azure
+  CLI. ``dns_azure_environment`` is global and applies to all sets.
+- A section without any authentication keys uses the top-level credentials; it is
+  merely a way to group zones.
+- Zone numbering restarts in every section. A zone may appear in one set only.
+- The top-level credentials can be left out entirely when every zone is in a section
+  that has credentials of its own.
+- Domain matching works across all sets: the longest configured domain wins, and the
+  credentials of the set it belongs to are used for that name. A certificate can
+  therefore span zones from several sets.
+
 .. _azure-environment:
 
 Azure environment

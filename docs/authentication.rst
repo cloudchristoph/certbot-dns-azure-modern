@@ -4,7 +4,9 @@ Authentication
 The plugin authenticates against Azure with the ``azure-identity`` library and
 supports six credential methods. Configure exactly one of them in the config file;
 if several are present, they are tried in the order of this page (Azure CLI first,
-system-assigned managed identity last).
+system-assigned managed identity last). Zones that need different identities, for
+example because they live in different tenants, get their own credential set in an
+INI section, see :ref:`credential-sets`.
 
 Required permissions
 --------------------

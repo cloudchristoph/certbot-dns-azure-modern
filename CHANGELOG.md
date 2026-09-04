@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Zones can use different credentials: put zones that share an identity into an INI
+  section (`[name]`) together with that identity's settings. Sections without
+  authentication keys use the top-level credentials. This allows one certificate to
+  span zones in different Entra ID tenants (terricain/certbot-dns-azure#49).
 - New option `--dns-azure-ttl` sets the TTL of the `_acme-challenge` TXT records; the
   default stays 120 seconds (terricain/certbot-dns-azure#48).
 - Support `azure-mgmt-dns` 9.x and drop the `<9.0.0` pin. 9.x removed the positional

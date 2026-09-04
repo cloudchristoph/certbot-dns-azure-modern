@@ -395,6 +395,83 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
             # under: "--dns-azure-ttl" in a real install, "--azure-ttl" in this test setup.
             self.assertIn('--{}-ttl must be'.format(auth_name), cm.exception.args[0])
 
+    def _sectioned_config(self, **overrides):
+        """Config with a top-level credential set and two [sections]."""
+        from certbot_dns_azure._internal.dns_azure import Authenticator
+        config = {
+            'azure_sp_client_id': 'top-client',
+            'azure_sp_client_secret': 'top-secret-not-real',
+            'azure_tenant_id': 'top-tenant',
+            'azure_zone1': 'example.com:/subscriptions/c135abce-d87d-48df-936c-15596c6968a5/resourceGroups/dns1',
+            'tenant2': {
+                'azure_sp_client_id': 'other-client',
+                'azure_sp_client_secret': 'other-secret-not-real',
+                'azure_tenant_id': 'other-tenant',
+                'azure_zone1': 'example.org:/subscriptions/99800903-fb14-4992-9aff-12eaf2744622/resourceGroups/dns2',
+            },
+            'inherits': {
+                'azure_zone1': 'example.net:/subscriptions/c135abce-d87d-48df-936c-15596c6968a5/resourceGroups/dns1',
+            },
+        }
+        config.update(overrides)
+        config = {k: v for k, v in config.items() if v is not None}  # None override drops the key
+        path = os.path.join(self.tempdir, 'sections.ini')
+        dns_test_common.write(config, path)
+        auth = Authenticator(mock.MagicMock(azure_config=path, azure_propagation_seconds=0, azure_ttl=120), "azure")
+        # one distinct credential object per client id
+        auth._get_azure_credentials = mock.MagicMock(
+            side_effect=lambda client_id, *a, **kw: mock.MagicMock(name='cred-' + str(client_id)))
+        auth._get_azure_client = mock.MagicMock(return_value=self.mock_client)
+        return auth
+
+    def test_sections_use_their_own_credentials(self):
+        auth = self._sectioned_config()
+        self.mock_client.record_sets.get.return_value = RecordSet(txt_records=[])
+
+        auth.perform(MULTI_DOMAIN)
+
+        # example.com -> top level, example.org -> [tenant2], example.net -> [inherits] (top level)
+        client_ids = [c[0][0] for c in auth._get_azure_credentials.call_args_list]
+        self.assertEqual(client_ids, ['top-client', 'other-client'])
+        creds = [c[0][1] for c in auth._get_azure_client.call_args_list]
+        self.assertEqual([str(c._mock_name) for c in creds], ['cred-top-client', 'cred-other-client', 'cred-top-client'])
+        self.assertIs(creds[0], creds[2])
+        self.assertEqual(auth.domain_scope, {'example.com': '', 'example.org': 'tenant2', 'example.net': ''})
+
+        # cleanup picks the same credentials
+        auth._get_azure_client.reset_mock()
+        auth._attempt_cleanup = True
+        auth.cleanup(MULTI_DOMAIN)
+        creds = [c[0][1] for c in auth._get_azure_client.call_args_list]
+        self.assertEqual([str(c._mock_name) for c in creds], ['cred-top-client', 'cred-other-client', 'cred-top-client'])
+
+    def test_sections_only_no_top_level_credentials(self):
+        # Every zone lives in a section with its own credentials; no top-level auth needed.
+        auth = self._sectioned_config(
+            azure_sp_client_id=None, azure_sp_client_secret=None, azure_tenant_id=None, azure_zone1=None,
+            inherits={'azure_msi_client_id': 'msi-client',
+                      'azure_zone1': 'example.net:/subscriptions/c135abce-d87d-48df-936c-15596c6968a5/resourceGroups/dns1'})
+        self.mock_client.record_sets.get.return_value = RecordSet(txt_records=[])
+        auth.perform(MULTI_DOMAIN[1:])
+        client_ids = [c[0][0] for c in auth._get_azure_credentials.call_args_list]
+        self.assertEqual(client_ids, ['other-client', None])
+        self.assertEqual(auth._get_azure_credentials.call_args_list[1][0][4], 'msi-client')
+
+    def test_section_without_any_credentials(self):
+        auth = self._sectioned_config(azure_sp_client_id=None, azure_sp_client_secret=None, azure_tenant_id=None,
+                                      azure_zone1=None)
+        with self.assertRaises(errors.PluginError) as cm:
+            auth.perform(SINGLE_DOMAIN)
+        self.assertIn('(section [inherits])', cm.exception.args[0])
+        self.assertIn('No authentication methods have been configured', cm.exception.args[0])
+
+    def test_zone_in_two_credential_sets(self):
+        auth = self._sectioned_config(
+            inherits={'azure_zone1': 'example.com:/subscriptions/c135abce-d87d-48df-936c-15596c6968a5/resourceGroups/dns1'})
+        with self.assertRaises(errors.PluginError) as cm:
+            auth.perform(SINGLE_DOMAIN)
+        self.assertIn('zone example.com is mapped more than once', cm.exception.args[0])
+
     def test_get_azure_client_uses_keyword_arguments(self):
         # azure-mgmt-dns 9.x dropped the positional api_version parameter; the client
         # must be built with keyword arguments so both 8.x and 9.x work. The scope has
