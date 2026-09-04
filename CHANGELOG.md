@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Fix retries, empty Azure TXT record sets, boolean config values, and unknown Azure
+  environments so failures are handled correctly instead of using stale values or
+  raising tracebacks.
 - Zones can use different credentials: put zones that share an identity into an INI
   section (`[name]`) together with that identity's settings. Sections without
   authentication keys use the top-level credentials. This allows one certificate to

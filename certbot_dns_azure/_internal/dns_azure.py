@@ -94,7 +94,12 @@ class Authenticator(dns_common.DNSAuthenticator):
     @staticmethod
     def _read_auth(section, mapper):
         """Authentication settings of one config section (top level or ``[name]``)."""
-        return {key: section.get(mapper(key)) for key in Authenticator.AUTH_KEYS}
+        auth = {key: section.get(mapper(key)) for key in Authenticator.AUTH_KEYS}
+        for key in ('msi_system_assigned', 'use_cli_credentials', 'use_workload_identity_credentials'):
+            value = auth[key]
+            if isinstance(value, str):
+                auth[key] = value.lower() == 'true'
+        return auth
 
     @staticmethod
     def _has_auth(auth):
@@ -151,8 +156,14 @@ class Authenticator(dns_common.DNSAuthenticator):
         if environment:
             self._azure_environment = environment.lower()
 
-        self._arm_endpoint = self._azure_endpoints[self._azure_environment]["ResourceManagerEndpoint"]
-        self._aad_endpoint = self._azure_endpoints[self._azure_environment]["ActiveDirectoryEndpoint"]
+        try:
+            endpoints = self._azure_endpoints[self._azure_environment]
+        except KeyError as exc:
+            raise errors.PluginError(
+                '{}: Unknown Azure environment {!r}'.format(confobj.filename, environment)
+            ) from exc
+        self._arm_endpoint = endpoints["ResourceManagerEndpoint"]
+        self._aad_endpoint = endpoints["ActiveDirectoryEndpoint"]
         
         # Check we have key value
         for items in zone_items.values():
@@ -315,7 +326,8 @@ class Authenticator(dns_common.DNSAuthenticator):
         return fqdn.replace(domain, '').strip('.')
 
     def _perform(self, domain, validation_name, validation, retry_attempt=0):
-        azure_domain, subscription_id, resource_group_name, validation_name, _ = self._get_ids_for_domain(domain, validation_name)
+        azure_domain, subscription_id, resource_group_name, record_name, _ = self._get_ids_for_domain(
+            domain, validation_name)
         client = self._get_azure_client(subscription_id, self._credential_for_domain(domain))
 
         # Check to see if there are any existing TXT validation record values
@@ -325,10 +337,10 @@ class Authenticator(dns_common.DNSAuthenticator):
             existing_rr = client.record_sets.get(
                 resource_group_name=resource_group_name,
                 zone_name=azure_domain,
-                relative_record_set_name=validation_name,
+                relative_record_set_name=record_name,
                 record_type='TXT')
             etag = existing_rr.etag
-            for record in existing_rr.txt_records:
+            for record in existing_rr.txt_records or []:
                 for value in record.value:
                     if value == '-':
                         continue
@@ -342,7 +354,7 @@ class Authenticator(dns_common.DNSAuthenticator):
             client.record_sets.create_or_update(
                 resource_group_name=resource_group_name,
                 zone_name=azure_domain,
-                relative_record_set_name=validation_name,
+                relative_record_set_name=record_name,
                 record_type='TXT',
                 if_match=etag,
                 parameters=RecordSet(ttl=self.ttl, txt_records=[TxtRecord(value=[v]) for v in txt_value])
@@ -357,7 +369,7 @@ class Authenticator(dns_common.DNSAuthenticator):
                 retry_attempt += 1
                 logger.warning("Concurrent access to record {}, sleeping {} seconds, retry attempt: {}".format(domain, sleep_secs, retry_attempt))
                 time.sleep(sleep_secs)
-                self._perform(domain, validation_name, validation, retry_attempt)
+                return self._perform(domain, validation_name, validation, retry_attempt)
             else:
                 raise errors.PluginError('Failed to add TXT record to domain '
                                          '{}, error: {}'.format(domain, err))
@@ -366,7 +378,8 @@ class Authenticator(dns_common.DNSAuthenticator):
         if not self.domain_zoneid:  # cleanup without a preceding perform in this process
             self._setup_credentials()
 
-        azure_domain, subscription_id, resource_group_name, validation_name, can_delete = self._get_ids_for_domain(domain, validation_name)
+        azure_domain, subscription_id, resource_group_name, record_name, can_delete = self._get_ids_for_domain(
+            domain, validation_name)
         client = self._get_azure_client(subscription_id, self._credential_for_domain(domain))
 
         txt_value = set()
@@ -374,11 +387,13 @@ class Authenticator(dns_common.DNSAuthenticator):
         try:
             existing_rr = client.record_sets.get(resource_group_name=resource_group_name,
                                                  zone_name=azure_domain,
-                                                 relative_record_set_name=validation_name,
+                                                 relative_record_set_name=record_name,
                                                  record_type='TXT')
             etag = existing_rr.etag
-            for record in existing_rr.txt_records:
+            for record in existing_rr.txt_records or []:
                 for value in record.value:
+                    if value == '-':
+                        continue
                     txt_value.add(value)
         except HttpResponseError as err:
             if err.status_code != 404:  # Ignore RR not found
@@ -392,7 +407,7 @@ class Authenticator(dns_common.DNSAuthenticator):
                 client.record_sets.create_or_update(
                     resource_group_name=resource_group_name,
                     zone_name=azure_domain,
-                    relative_record_set_name=validation_name,
+                    relative_record_set_name=record_name,
                     record_type='TXT',
                     if_match=etag,
                     parameters=RecordSet(ttl=self.ttl,
@@ -403,7 +418,7 @@ class Authenticator(dns_common.DNSAuthenticator):
                     client.record_sets.delete(
                         resource_group_name=resource_group_name,
                         zone_name=azure_domain,
-                        relative_record_set_name=validation_name,
+                        relative_record_set_name=record_name,
                         if_match=etag,
                         record_type='TXT'
                     )
@@ -411,7 +426,7 @@ class Authenticator(dns_common.DNSAuthenticator):
                     client.record_sets.create_or_update(  # We've manually specified a record, so dont delete, set to -
                         resource_group_name=resource_group_name,
                         zone_name=azure_domain,
-                        relative_record_set_name=validation_name,
+                        relative_record_set_name=record_name,
                         if_match=etag,
                         record_type='TXT',
                         parameters=RecordSet(ttl=self.ttl, txt_records=[TxtRecord(value=['-'])])
@@ -426,7 +441,7 @@ class Authenticator(dns_common.DNSAuthenticator):
                 retry_attempt += 1
                 logger.warning("Concurrent access to record {}, sleeping {} seconds, retry attempt: {}".format(domain, sleep_secs, retry_attempt))
                 time.sleep(sleep_secs)
-                self._cleanup(domain, validation_name, validation, retry_attempt)
+                return self._cleanup(domain, validation_name, validation, retry_attempt)
             elif err.status_code != 404:  # Ignore RR not found
                 raise errors.PluginError('Failed to remove/empty TXT record for domain '
                                          '{}, error: {}'.format(domain, err))
