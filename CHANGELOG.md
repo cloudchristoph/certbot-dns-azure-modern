@@ -12,6 +12,13 @@
   re-resolves the record from the original validation name; the retry previously
   passed the already relative record name back in.
 - Record sets without TXT values no longer raise `TypeError`.
+- Creating a new `_acme-challenge` record set is conditional (`If-None-Match: *`). Two
+  certbot runs racing for the same name no longer overwrite each other; the loser
+  re-reads the record and merges its value, as already happened for updates.
+- A zone mapping whose resource id lacks `/subscriptions/<id>/resourceGroups/<name>`
+  is rejected with a clear message instead of a `ValueError` from the Azure SDK.
+- Zone names in mappings are compared case-insensitively and trimmed, so
+  `Example.com` and `example.com` count as the same zone.
 - Zones can use different credentials: put zones that share an identity into an INI
   section (`[name]`) together with that identity's settings. Sections without
   authentication keys use the top-level credentials. This allows one certificate to
