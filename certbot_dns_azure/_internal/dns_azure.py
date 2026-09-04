@@ -32,6 +32,11 @@ class Authenticator(dns_common.DNSAuthenticator):
         super(Authenticator, self).__init__(*args, **kwargs)
         self.credential = None
         self.domain_zoneid = {}  # type: Dict[str, str]
+        # zone -> name of the credential set that owns it ('' for the top level)
+        self.domain_scope = {}  # type: Dict[str, str]
+        # credential set name -> TokenCredential, created on first use
+        self._scope_credentials = {}  # type: Dict[str, object]
+        self._scope_auth = {}  # type: Dict[str, Dict[str, str]]
         self.ttl = self._get_ttl()
 
         # Azure Environmental Support
@@ -81,33 +86,63 @@ class Authenticator(dns_common.DNSAuthenticator):
         return 'This plugin configures a DNS TXT record to respond to a dns-01 challenge using ' + \
                'the Azure DNS API.'
 
+    AUTH_KEYS = ('sp_client_id', 'sp_client_secret', 'sp_certificate_path', 'tenant_id',
+                 'msi_client_id', 'msi_system_assigned', 'use_cli_credentials',
+                 'use_workload_identity_credentials')
+
+    @staticmethod
+    def _read_auth(section, mapper):
+        """Authentication settings of one config section (top level or ``[name]``)."""
+        return {key: section.get(mapper(key)) for key in Authenticator.AUTH_KEYS}
+
+    @staticmethod
+    def _has_auth(auth):
+        has_sp = all((auth['sp_client_id'],
+                      any((auth['sp_client_secret'], auth['sp_certificate_path'])),
+                      auth['tenant_id']))
+        return any((has_sp, auth['msi_system_assigned'], auth['msi_client_id'],
+                    auth['use_cli_credentials'], auth['use_workload_identity_credentials']))
+
+    @staticmethod
+    def _zone_items(section):
+        """``(key, value)`` of the zone mappings in one config section."""
+        return [(key, value) for key, value in section.items()
+                if 'azure_zone' in key and isinstance(value, str)]
+
     def _validate_credentials(self, credentials):
-        sp_client_id = credentials.conf('sp_client_id')
-        sp_client_secret = credentials.conf('sp_client_secret')
-        sp_certificate_path = credentials.conf('sp_certificate_path')
-        tenant_id = credentials.conf('tenant_id')
-        has_sp = all((sp_client_id, any((sp_client_secret, sp_certificate_path)), tenant_id))
+        confobj = credentials.confobj
+        mapper = credentials.mapper
 
-        msi_client_id = credentials.conf('msi_client_id')
-        msi_system_assigned = credentials.conf('msi_system_assigned')
+        # Credential sets: the top level ('') and every [section]. A section without
+        # its own authentication settings uses the top-level ones.
+        scopes = {'': confobj}
+        for name in confobj.sections:
+            scopes[name] = confobj[name]
 
-        use_azure_cli_creds = credentials.conf('use_cli_credentials')
+        top_auth = self._read_auth(confobj, mapper)
+        has_top_auth = self._has_auth(top_auth)
+        zone_items = {name: self._zone_items(section) for name, section in scopes.items()}
 
-        use_workload_identity_creds = credentials.conf('use_workload_identity_credentials')
+        zones_in_sections = any(items for name, items in zone_items.items() if name)
+        for name, section in scopes.items():
+            if name == '' and not has_top_auth and not zone_items[''] and zones_in_sections:
+                continue  # all zones live in sections with their own credentials
+            auth = self._read_auth(section, mapper) if name else top_auth
+            if name and not any(auth.values()):
+                auth = top_auth
+            if not self._has_auth(auth):
+                where = '' if name == '' else ' (section [{}])'.format(name)
+                raise errors.PluginError('{}{}: No authentication methods have been '
+                                         'configured for Azure DNS. Either configure '
+                                         'a service principal, system/user assigned '
+                                         'managed identity or configure the use of '
+                                         'azure cli or workload identity credentials'
+                                         .format(confobj.filename, where))
 
-        if not any((has_sp, msi_system_assigned, msi_client_id, use_azure_cli_creds, use_workload_identity_creds)):
-            raise errors.PluginError('{}: No authentication methods have been '
-                                     'configured for Azure DNS. Either configure '
-                                     'a service principal, system/user assigned '
-                                     'managed identity or configure the use of '
-                                     'azure cli or workload identity credentials'.format(credentials.confobj.filename))
-
-        has_zone_mapping = any((key for key in credentials.confobj.keys() if 'azure_zone' in key))
-
-        if not has_zone_mapping:
+        if not any(zone_items.values()):
             raise errors.PluginError('{}: At least one zone mapping needs to be provided,'
                                      ' e.g dns_azure_zone1 = DOMAIN:DNS_ZONE_RESOURCE_GROUP_ID'
-                                     ''.format(credentials.confobj.filename))
+                                     ''.format(confobj.filename))
 
         # Azure Environment
         environment = credentials.conf('environment')
@@ -119,13 +154,11 @@ class Authenticator(dns_common.DNSAuthenticator):
         self._aad_endpoint = self._azure_endpoints[self._azure_environment]["ActiveDirectoryEndpoint"]
         
         # Check we have key value
-        dns_zone_mapping_items_has_colon = [':' in value
-                                            for key, value in credentials.confobj.items()
-                                            if 'azure_zone' in key]
-        if not all(dns_zone_mapping_items_has_colon):
-            raise errors.PluginError('{}: DNS Zone mapping is not in the format of '
-                                     'DOMAIN:DNS_ZONE_RESOURCE_GROUP_ID'
-                                     ''.format(credentials.confobj.filename))
+        for items in zone_items.values():
+            if not all(':' in value for _, value in items):
+                raise errors.PluginError('{}: DNS Zone mapping is not in the format of '
+                                         'DOMAIN:DNS_ZONE_RESOURCE_GROUP_ID'
+                                         ''.format(confobj.filename))
 
     def _setup_credentials(self):
         # Alias's dns-azure-credentials -> dns-azure-config
@@ -139,23 +172,51 @@ class Authenticator(dns_common.DNSAuthenticator):
             self._validate_credentials
         )
 
-        # Convert dns_azure_zoneX = key:value into key:value
-        dns_zone_mapping_items = [value for key, value in valid_creds.confobj.items()
-                                  if 'azure_zone' in key]
-        self.domain_zoneid = dict([item.split(':', 1) for item in dns_zone_mapping_items])
+        confobj = valid_creds.confobj
+        mapper = valid_creds.mapper
 
-        # Figure out which credential type we're going to use
-        sp_client_id = valid_creds.conf('sp_client_id')
-        sp_client_secret = valid_creds.conf('sp_client_secret')
-        sp_certificate_path = valid_creds.conf('sp_certificate_path')
-        tenant_id = valid_creds.conf('tenant_id')
-        msi_client_id = valid_creds.conf('msi_client_id')
-        use_azure_cli_creds = valid_creds.conf('use_cli_credentials')
-        use_workload_identity_creds = valid_creds.conf('use_workload_identity_credentials')
+        # Convert dns_azure_zoneX = key:value into key:value, remembering which
+        # credential set (top level or [section]) each zone belongs to.
+        self.domain_zoneid = {}
+        self.domain_scope = {}
+        self._scope_auth = {'': self._read_auth(confobj, mapper)}
+        self._scope_credentials = {}
+        for name, section in [('', confobj)] + [(name, confobj[name]) for name in confobj.sections]:
+            scope = name
+            if name:
+                auth = self._read_auth(section, mapper)
+                if any(auth.values()):
+                    self._scope_auth[name] = auth
+                else:
+                    scope = ''  # section without credentials of its own: top-level ones
+            for _, value in self._zone_items(section):
+                domain, zone_id = value.split(':', 1)
+                if domain in self.domain_zoneid:
+                    raise errors.PluginError('{}: zone {} is mapped more than once'
+                                             .format(confobj.filename, domain))
+                self.domain_zoneid[domain] = zone_id
+                self.domain_scope[domain] = scope
 
-        self.credential = self._get_azure_credentials(
-            sp_client_id, sp_client_secret, sp_certificate_path, tenant_id, msi_client_id, use_azure_cli_creds, use_workload_identity_creds, self._aad_endpoint
-        )
+        # The top-level credential; kept as an attribute for compatibility. Stays None
+        # when every zone lives in a [section] with credentials of its own.
+        if self._has_auth(self._scope_auth['']):
+            self.credential = self._credential_for_scope('')
+
+    def _credential_for_scope(self, scope):
+        """Azure credential of one credential set, created on first use."""
+        if scope not in self._scope_credentials:
+            auth = self._scope_auth[scope]
+            self._scope_credentials[scope] = self._get_azure_credentials(
+                auth['sp_client_id'], auth['sp_client_secret'], auth['sp_certificate_path'],
+                auth['tenant_id'], auth['msi_client_id'], auth['use_cli_credentials'],
+                auth['use_workload_identity_credentials'], self._aad_endpoint
+            )
+        return self._scope_credentials[scope]
+
+    def _credential_for_domain(self, domain):
+        """Azure credential for the configured zone that serves ``domain``."""
+        zone = self._match_zone(domain)
+        return self._credential_for_scope(self.domain_scope.get(zone, ''))
 
     @staticmethod
     def _get_azure_credentials(client_id=None, client_secret=None, certificate_path=None, tenant_id=None, msi_client_id=None,
@@ -197,18 +258,9 @@ class Authenticator(dns_common.DNSAuthenticator):
         * The relative validation record name (or if explicitly overrided with an ID, an alternate record name)
         * If the validation record can be deleted, if its explicitly overrided, it wont be deleted but set to `-`
         """
-        # So if the config contains domain.io and test.domain.io
-        # and we want to renew, we'd prefer test.domain.io.
-        # Sort domains by longest first and then attempt to find the right one.
-        # This should work better, as then a.b.test.domain.io would pick domain.io irrelevant
-        # of its order in the config
-        azure_domains = sorted(self.domain_zoneid.keys(), key=lambda domain: len(domain), reverse=True)
-
         try:
-            for azure_dns_domain in azure_domains:
-                # Match the zone itself or any subdomain of it. The match must sit on a
-                # label boundary: 'abcxyz.net' is not part of the 'xyz.net' zone.
-                if self._is_domain_or_subdomain(domain, azure_dns_domain):
+            azure_dns_domain = self._match_zone(domain)
+            if azure_dns_domain is not None:
                     zone_id = self.domain_zoneid[azure_dns_domain]
 
                     try:
@@ -227,11 +279,22 @@ class Authenticator(dns_common.DNSAuthenticator):
                         can_delete = False  # If we're specifying a specific record, dont delete it
 
                     return azure_dns_domain, subscription_id, rg_name, relative_validation_name, can_delete
-            else:
-                raise errors.PluginError('Domain {} does not have a valid domain to '
-                                         'resource group id mapping'.format(domain))
+            raise errors.PluginError('Domain {} does not have a valid domain to '
+                                     'resource group id mapping'.format(domain))
         except IndexError:
             raise errors.PluginError('Domain {} has an invalid resource group id'.format(domain))
+
+    def _match_zone(self, domain: str):
+        """The configured zone that serves ``domain``, or None.
+
+        The longest configured domain wins, so a mapping for test.domain.io beats one
+        for domain.io regardless of their order in the config. The match must sit on
+        a label boundary: 'abcxyz.net' is not part of the 'xyz.net' zone.
+        """
+        for azure_dns_domain in sorted(self.domain_zoneid, key=len, reverse=True):
+            if self._is_domain_or_subdomain(domain, azure_dns_domain):
+                return azure_dns_domain
+        return None
 
     @staticmethod
     def _is_domain_or_subdomain(name: str, zone: str) -> bool:
@@ -255,7 +318,7 @@ class Authenticator(dns_common.DNSAuthenticator):
 
     def _perform(self, domain, validation_name, validation, retry_attempt=0):
         azure_domain, subscription_id, resource_group_name, validation_name, _ = self._get_ids_for_domain(domain, validation_name)
-        client = self._get_azure_client(subscription_id)
+        client = self._get_azure_client(subscription_id, self._credential_for_domain(domain))
 
         # Check to see if there are any existing TXT validation record values
         txt_value = {validation}
@@ -302,11 +365,11 @@ class Authenticator(dns_common.DNSAuthenticator):
                                          '{}, error: {}'.format(domain, err))
 
     def _cleanup(self, domain, validation_name, validation, retry_attempt=0):
-        if self.credential is None:
+        if not self.domain_zoneid:  # cleanup without a preceding perform in this process
             self._setup_credentials()
 
         azure_domain, subscription_id, resource_group_name, validation_name, can_delete = self._get_ids_for_domain(domain, validation_name)
-        client = self._get_azure_client(subscription_id)
+        client = self._get_azure_client(subscription_id, self._credential_for_domain(domain))
 
         txt_value = set()
         etag = None
@@ -370,19 +433,22 @@ class Authenticator(dns_common.DNSAuthenticator):
                 raise errors.PluginError('Failed to remove/empty TXT record for domain '
                                          '{}, error: {}'.format(domain, err))
 
-    def _get_azure_client(self, subscription_id):
+    def _get_azure_client(self, subscription_id, credential=None):
         """
         Gets azure DNS client
 
         :param subscription_id: Azure subscription ID
         :type subscription_id: str
+        :param credential: Azure credential to use, defaults to the top-level one
         :return: Azure DNS client
         :rtype: DnsManagementClient
         """
+        if credential is None:
+            credential = self.credential
         # Keyword arguments on purpose: azure-mgmt-dns 8.x takes (credential, subscription_id,
         # api_version, base_url, ...) positionally, 9.x dropped api_version and takes
         # (credential, subscription_id, base_url, ...). Keywords work for both.
-        return DnsManagementClient(self.credential, subscription_id,
+        return DnsManagementClient(credential, subscription_id,
                                    base_url=self._arm_endpoint,
                                    credential_scopes=[self._arm_endpoint.rstrip('/') + "/.default"])
 

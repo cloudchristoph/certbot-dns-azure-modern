@@ -18,9 +18,10 @@ Expected zones (all in the resource group above):
 * ``zone1.<base>``, ``zone2.<base>`` - the plugin writes ``_acme-challenge*`` TXT
   records here; leftovers from failed runs are removed, nothing else is touched
 
-What the four tests cover: plain dns-01 in one zone, one certificate spanning two
-zones, a zone override (challenge for ``<base>`` written into ``zone2``) and a
-record override (challenge written into the fixed TXT record ``other``).
+What the five tests cover: plain dns-01 in one zone, one certificate spanning two
+zones, the same with the zones in separate credential sets (INI sections), a zone
+override (challenge for ``<base>`` written into ``zone2``) and a record override
+(challenge written into the fixed TXT record ``other``).
 
 Authentication uses the Azure CLI credential (``az login``), or a client secret
 when ``AZURE_CLIENT_SECRET`` is set. Certificates come from the staging CA
@@ -30,7 +31,7 @@ import os
 import subprocess
 import time
 import uuid
-from typing import TYPE_CHECKING, List, Tuple
+from typing import TYPE_CHECKING, Dict, List, Tuple
 
 import pytest
 from azure.mgmt.dns import DnsManagementClient
@@ -146,25 +147,34 @@ def cert_sans(cert_path: 'pathlib.Path') -> List[str]:
     return san.get_values_for_type(x509.DNSName)
 
 
-def create_config(tmpdir: 'pathlib.Path', zones: List[str]) -> str:
+def create_config(tmpdir: 'pathlib.Path', zones: List[str], sections: Dict[str, List[str]] = None) -> str:
     """
     Creates a config file for certbot azure dns
 
     :param tmpdir: Temporary pytest fixture
     :param zones: List of zone entries for config
+    :param sections: Optional ``{section name: zone entries}``; each section gets its
+        own copy of the credential settings, to exercise per-section credentials
     :returns: Filepath to config
     """
-    config = {
+    auth = {
         # 'dns_azure_sp_client_id': os.environ['AZURE_CLIENT_ID'],
         # 'dns_azure_sp_client_secret': os.environ['AZURE_CLIENT_SECRET'],
         'dns_azure_use_cli_credentials': 'true',
         'dns_azure_tenant_id': os.environ['AZURE_TENANT_ID'],
-        'dns_azure_environment': AZURE_ENV,
     }
+    config = dict(auth, dns_azure_environment=AZURE_ENV)
     for index, zone in enumerate(zones, start=1):
         config[f"dns_azure_zone{index}"] = zone
 
-    config_text = '\n'.join([' = '.join(item) for item in config.items()]) + '\n'
+    lines = [' = '.join(item) for item in config.items()]
+    for name, section_zones in (sections or {}).items():
+        lines.append(f'\n[{name}]')
+        lines.extend(' = '.join(item) for item in auth.items())
+        for index, zone in enumerate(section_zones, start=1):
+            lines.append(f"dns_azure_zone{index} = {zone}")
+
+    config_text = '\n'.join(lines) + '\n'
     config_file = tmpdir / "config.ini"
     config_file.write_text(config_text)
     config_file.chmod(0o600)
@@ -264,6 +274,29 @@ def test_multi_zone(tmp_path, azure_dns_client):
     proc, stdout, stderr = run_certbot(certbot_path, config_file, [fqdn1, fqdn2])
 
     # One certificate covering both names, stored under the first name's lineage
+    cert_path = certbot_path / 'archive' / fqdn1 / 'cert1.pem'
+    if not cert_path.exists():
+        print(f"STDOUT:\n{stdout}")
+        pytest.fail(f"Certificate path {cert_path} does not exist")
+    assert set(cert_sans(cert_path)) == {fqdn1, fqdn2}
+
+
+@azure_creds
+def test_multi_zone_sections(tmp_path, azure_dns_client):
+    """
+    One certificate over two zones whose mappings live in different credential sets:
+    zone1 at the top level, zone2 in a [section] with credentials of its own.
+    """
+    certbot_path = tmp_path / "certbot"
+    rr_name1, rr_name2 = get_cert_names(2)
+    fqdn1 = f"{rr_name1}.{ZONE1}"
+    fqdn2 = f"{rr_name2}.{ZONE2}"
+
+    config_file = create_config(tmp_path, [f"{ZONE1}:{ZONES[ZONE1]}"],
+                                sections={'second': [f"{ZONE2}:{ZONES[ZONE2]}"]})
+
+    proc, stdout, stderr = run_certbot(certbot_path, config_file, [fqdn1, fqdn2])
+
     cert_path = certbot_path / 'archive' / fqdn1 / 'cert1.pem'
     if not cert_path.exists():
         print(f"STDOUT:\n{stdout}")
