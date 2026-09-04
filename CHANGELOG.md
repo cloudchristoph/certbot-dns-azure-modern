@@ -27,4 +27,4 @@ unchanged, so it is a drop-in replacement for `certbot-dns-azure`.
 
 ## 2.6.1 and earlier
 
-See the upstream project: https://github.com/terricain/certbot-dns-azure/releases
+See the upstream project: https://github.com/terricain/certbot-dns-azure
