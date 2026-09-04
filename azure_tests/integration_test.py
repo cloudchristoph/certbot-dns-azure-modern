@@ -195,7 +195,8 @@ RETRY_DELAY_SECONDS = 20
 
 def _tail(path: 'pathlib.Path', lines: int = 80) -> str:
     try:
-        return ''.join(path.read_text().splitlines(keepends=True)[-lines:])
+        text = path.read_text(encoding='utf-8', errors='replace')
+        return ''.join(text.splitlines(keepends=True)[-lines:])
     except OSError:
         return f'(no log at {path})'
 
