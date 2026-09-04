@@ -28,6 +28,7 @@ when ``AZURE_CLIENT_SECRET`` is set. Certificates come from the staging CA
 """
 import os
 import subprocess
+import time
 import uuid
 from typing import TYPE_CHECKING, List, Tuple
 
@@ -170,6 +171,25 @@ def create_config(tmpdir: 'pathlib.Path', zones: List[str]) -> str:
     return str(config_file)
 
 
+# Errors from the ACME server (not from the plugin) that go away on a retry. Seen on
+# Let's Encrypt staging: "Certificate not found" when the freshly issued certificate
+# is not served yet.
+TRANSIENT_ACME_ERRORS = (
+    'Certificate not found',
+    'Service Unavailable',
+    'Connection reset by peer',
+    'Read timed out',
+)
+RETRY_DELAY_SECONDS = 20
+
+
+def _tail(path: 'pathlib.Path', lines: int = 80) -> str:
+    try:
+        return ''.join(path.read_text().splitlines(keepends=True)[-lines:])
+    except OSError:
+        return f'(no log at {path})'
+
+
 def run_certbot(certbot_path: 'pathlib.Path', config_file: str, fqdns: List[str], *, dry_run: bool = False) -> Tuple[subprocess.Popen, str, str]:
     args = [
         'certbot', 'certonly', '--authenticator', 'dns-azure', '--preferred-challenges', 'dns', '--noninteractive',
@@ -187,13 +207,20 @@ def run_certbot(certbot_path: 'pathlib.Path', config_file: str, fqdns: List[str]
     for fqdn in fqdns:
         args.extend(['-d', fqdn])
 
-    proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    stdout, stderr = proc.communicate()
-    if proc.returncode != 0:
-        print(f"Error, return code {proc.returncode}\nSTDERR:\n{stderr}\nSTDOUT:\n{stdout}")
-        pytest.fail()
-
-    return proc, stdout, stderr
+    for attempt in (1, 2):
+        proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        stdout, stderr = proc.communicate()
+        if proc.returncode == 0:
+            return proc, stdout, stderr
+        transient = any(marker in stderr for marker in TRANSIENT_ACME_ERRORS)
+        if transient and attempt == 1:
+            print(f"certbot failed with a transient ACME error, retrying in {RETRY_DELAY_SECONDS}s:\n{stderr}")
+            time.sleep(RETRY_DELAY_SECONDS)
+            continue
+        log = _tail(certbot_path / 'letsencrypt.log')
+        pytest.fail(f"certbot exited with {proc.returncode}\nSTDERR:\n{stderr}\nSTDOUT:\n{stdout}\n"
+                    f"letsencrypt.log (tail):\n{log}", pytrace=False)
+    raise AssertionError('unreachable')
 
 
 @azure_creds
