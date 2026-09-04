@@ -68,3 +68,6 @@ certbot-dns*/certbot-dns*_arm*.txt
 certbot-dns*/snap
 certbot-dns-azure_*.txt
 snapcraft-certbot-dns-azure-*.txt
+
+# personal notes for Claude Code, never committed
+CLAUDE.local.md

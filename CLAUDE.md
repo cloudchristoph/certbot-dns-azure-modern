@@ -7,6 +7,9 @@ name (`dns-azure`), CLI flags and config format are unchanged on purpose: downst
 
 ## Ground rules
 
+- Personal/operational details (Azure ids, private repos, the maintainer's own
+  deployment) belong in `CLAUDE.local.md`, which is gitignored. Keep this file generic.
+
 - Everything in this repo is English: code, comments, docs, commit messages, issues.
 - Never commit or push without explicit approval from Christoph. Prepare the change,
   show the diff, ask.
@@ -71,11 +74,12 @@ Expected: certbot stays at the image version (5.6.0 in 2.15.1), `pip check` clea
 
 ## Azure integration tests
 
-Dedicated infrastructure in subscription "VS CloudChristoph", resource
-group `rg-certbot-test`, base domain `certbot-test.aznethorizon.com` (delegated with one NS
-record from the production zone `aznethorizon.com` in `rg-dns-zones`). Zones: `zone1`,
-`zone2`, `del1`, `del2` below the base domain; `del1` holds the static CNAME/TXT records
-for the delegation tests. Never point the tests at a production zone.
+Dedicated infrastructure: resource group `rg-certbot-test`, base domain
+`certbot-test.aznethorizon.com` (delegated with a single NS record from the parent zone).
+Three zones: the base zone holds the static CNAME/TXT records for the delegation tests
+and delegates `zone1` and `zone2`, which the plugin writes to. Never point the tests at a
+production zone. Subscription, tenant and identity ids live in `CLAUDE.local.md`
+(gitignored), not here.
 
 Safety rules baked into the test module: it refuses to run unless the base domain starts
 with `certbot-test.`, and cleanup only deletes `_acme-challenge*` TXT records that did not
@@ -124,5 +128,5 @@ Nginx Proxy Manager installs plugins with
 "azure": { "dependencies": "", "package_name": "certbot-dns-azure-modern", "version": "~=2.7.0" }
 ```
 
-Christoph's own NPM config lives in the private `nas_configs` repo
-(`nginx-proxy-manager/dns-plugins.json`, bind-mounted over `/app/certbot/dns-plugins.json`).
+Users can override that file until the PR lands (bind-mount a patched copy over
+`/app/certbot/dns-plugins.json` and recreate the container, see README).

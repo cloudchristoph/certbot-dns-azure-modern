@@ -39,7 +39,7 @@ At least 1 zone mapping is required.
    :caption: Example config file using a service principal
 
    dns_azure_sp_client_id = 912ce44a-0156-4669-ae22-c16a17d34ca5
-   dns_azure_sp_client_secret = E-xqXU83Y-jzTI6xe9fs2YC~mck3ZzUih9
+   dns_azure_sp_client_secret = example-client-secret-not-real
    dns_azure_tenant_id = ed1090f3-ab18-4b12-816c-599af8a88cf7
 
    dns_azure_environment = "AzurePublicCloud"

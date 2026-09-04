@@ -66,7 +66,7 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
         config_files = (
             ('sp.ini', {
                 'azure_sp_client_id': '912ce44a-0156-4669-ae22-c16a17d34ca5',
-                'azure_sp_client_secret': 'E-xqXU83Y-jzTI6xe9fs2YC~mck3ZzUih9',
+                'azure_sp_client_secret': 'example-client-secret-not-real',
                 'azure_tenant_id': 'ed1090f3-ab18-4b12-816c-599af8a88cf7',
                 'azure_zone1': 'example.com:/subscriptions/c135abce-d87d-48df-936c-15596c6968a5/resourceGroups/dns1',
                 'azure_zone2': 'example.org:/subscriptions/99800903-fb14-4992-9aff-12eaf2744622/resourceGroups/dns2',
@@ -75,7 +75,7 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
             }),
             ('sp_cert.ini', {
                 'azure_sp_client_id': '912ce44a-0156-4669-ae22-c16a17d34ca5',
-                'azure_sp_client_secret': 'E-xqXU83Y-jzTI6xe9fs2YC~mck3ZzUih9',
+                'azure_sp_client_secret': 'example-client-secret-not-real',
                 'azure_certificate_path': '/path/to/cert.pem',
                 'azure_zone1': 'example.com:/subscriptions/c135abce-d87d-48df-936c-15596c6968a5/resourceGroups/dns1',
                 'azure_zone2': 'example.org:/subscriptions/99800903-fb14-4992-9aff-12eaf2744622/resourceGroups/dns2'
@@ -293,7 +293,7 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
         # Test missing mapping list
         dns_test_common.write({
             'azure_sp_client_id': '912ce44a-0156-4669-ae22-c16a17d34ca5',
-            'azure_sp_client_secret': 'E-xqXU83Y-jzTI6xe9fs2YC~mck3ZzUih9',
+            'azure_sp_client_secret': 'example-client-secret-not-real',
             'azure_tenant_id': 'ed1090f3-ab18-4b12-816c-599af8a88cf7',
         }, self.sp_config.azure_config)
         with self.assertRaises(errors.PluginError) as cm:
@@ -304,7 +304,7 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
         # Test missing mapping list
         dns_test_common.write({
             'azure_sp_client_id': '912ce44a-0156-4669-ae22-c16a17d34ca5',
-            'azure_sp_client_secret': 'E-xqXU83Y-jzTI6xe9fs2YC~mck3ZzUih9',
+            'azure_sp_client_secret': 'example-client-secret-not-real',
             'azure_tenant_id': 'ed1090f3-ab18-4b12-816c-599af8a88cf7',
             'azure_zone1': 'example.com',
         }, self.sp_config.azure_config)
@@ -316,7 +316,7 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
         # Test invalid resource group ID
         dns_test_common.write({
             'azure_sp_client_id': '912ce44a-0156-4669-ae22-c16a17d34ca5',
-            'azure_sp_client_secret': 'E-xqXU83Y-jzTI6xe9fs2YC~mck3ZzUih9',
+            'azure_sp_client_secret': 'example-client-secret-not-real',
             'azure_tenant_id': 'ed1090f3-ab18-4b12-816c-599af8a88cf7',
             'azure_zone1': 'example.com:/subscriptions/c135abce-d87d-48df-936c-15596c6968a5/invalid',
         }, self.sp_config.azure_config)

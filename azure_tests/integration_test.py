@@ -9,14 +9,18 @@ Required environment:
 ``AZURE_DNS_TEST_DOMAIN``    base domain, must be ``certbot-test.<domain>``
 ``EMAIL``                    ACME account email
 
-Expected zones below the base domain (all in the resource group above):
+Expected zones (all in the resource group above):
 
-* ``zone1.<base>``, ``zone2.<base>``, ``del2.<base>`` - the plugin writes
-  ``_acme-challenge*`` TXT records here; leftovers from failed runs are removed,
-  nothing else in these zones is touched
-* ``del1.<base>`` - static, must contain
-  ``_acme-challenge      CNAME _acme-challenge.del1.<base>.del2.<base>``,
-  ``_acme-challenge.test CNAME other.del1.<base>`` and ``other TXT "-"``
+* ``<base>`` - delegates the two child zones and holds the static records for the
+  delegation tests:
+  ``_acme-challenge      CNAME _acme-challenge.<base>.zone2.<base>``,
+  ``_acme-challenge.test CNAME other.<base>`` and ``other TXT "-"``
+* ``zone1.<base>``, ``zone2.<base>`` - the plugin writes ``_acme-challenge*`` TXT
+  records here; leftovers from failed runs are removed, nothing else is touched
+
+What the four tests cover: plain dns-01 in one zone, one certificate spanning two
+zones, a zone override (challenge for ``<base>`` written into ``zone2``) and a
+record override (challenge written into the fixed TXT record ``other``).
 
 Authentication uses the Azure CLI credential (``az login``), or a client secret
 when ``AZURE_CLIENT_SECRET`` is set. Certificates come from the staging CA
@@ -53,17 +57,17 @@ BASE_DOMAIN = os.getenv('AZURE_DNS_TEST_DOMAIN', 'certbot-test.invalid')
 RG_ID = f'/subscriptions/{SUBSCRIPTION_ID}/resourceGroups/{RESOURCE_GROUP}'
 ZONE1 = f'zone1.{BASE_DOMAIN}'
 ZONE2 = f'zone2.{BASE_DOMAIN}'
-DEL1 = f'del1.{BASE_DOMAIN}'
-DEL2 = f'del2.{BASE_DOMAIN}'
 
-# Zones the plugin writes to; del1 only holds static CNAME/TXT records.
+# Zones the tests write to (checked for leftovers afterwards)
 ZONES = {
+    BASE_DOMAIN: RG_ID,
     ZONE1: RG_ID,
     ZONE2: RG_ID,
-    DEL2: RG_ID,
 }
-DELEGATION_ZONE = f'{RG_ID}/providers/Microsoft.Network/dnsZones/{DEL2}'
-DELEGATION_ZONE2 = f'{RG_ID}/providers/Microsoft.Network/dnsZones/{DEL1}/TXT/other'
+# Zone override: challenges for <base> go into zone2
+DELEGATION_ZONE = f'{RG_ID}/providers/Microsoft.Network/dnsZones/{ZONE2}'
+# Record override: challenges for test.<base> go into the fixed TXT record "other" of <base>
+DELEGATION_RECORD = f'{RG_ID}/providers/Microsoft.Network/dnsZones/{BASE_DOMAIN}/TXT/other'
 
 
 def get_cert_names(count: int = 1) -> List[str]:
@@ -242,12 +246,12 @@ def test_multi_zone(tmp_path, azure_dns_client):
 @azure_creds
 def test_delegation_other_domain(tmp_path, azure_dns_client):
     """
-    Tests getting a certificate for a single zone
+    Tests the zone override: the challenge for one domain is written into another zone
     """
     certbot_path = tmp_path / "certbot"
-    fqdn = DEL1
+    fqdn = BASE_DOMAIN
 
-    # domain is del1, but we're explicitly overriding the zone to del2
+    # domain is <base>, but the zone is explicitly overridden to zone2
     config_file = create_config(tmp_path, [
         f"{fqdn}:{DELEGATION_ZONE}"
     ])
@@ -263,14 +267,15 @@ def test_delegation_other_domain(tmp_path, azure_dns_client):
 @azure_creds
 def test_delegation_specific_record(tmp_path, azure_dns_client):
     """
-    Tests getting a certificate for a single zone
+    Tests the record override: the challenge is written into a fixed TXT record
+    that is reset to "-" instead of being deleted
     """
     certbot_path = tmp_path / "certbot"
-    fqdn = f'test.{DEL1}'
+    fqdn = f'test.{BASE_DOMAIN}'
 
-    # domain is del1, but we're explicitly overriding to an alternate record of del1
+    # domain is test.<base>, but the validation record is overridden to <base>/TXT/other
     config_file = create_config(tmp_path, [
-        f"{fqdn}:{DELEGATION_ZONE2}"
+        f"{fqdn}:{DELEGATION_RECORD}"
     ])
 
     proc, stdout, stderr = run_certbot(certbot_path, config_file, [fqdn])
