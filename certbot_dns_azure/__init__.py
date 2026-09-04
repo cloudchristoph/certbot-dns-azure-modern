@@ -4,9 +4,8 @@ completing a ``dns-01`` challenge (`~acme.challenges.DNS01`) by creating, and
 subsequently removing, TXT records using the Azure API.
 
 .. note::
-   The plugin is not installed by default. It can be installed by heading to
-   `certbot.eff.org <https://certbot.eff.org/instructions#wildcard>`_, choosing your system and
-   selecting the Wildcard tab.
+   The plugin is not installed by default. Install it next to certbot with
+   ``pip install certbot certbot-dns-azure-modern``.
 
 Named Arguments
 ---------------
