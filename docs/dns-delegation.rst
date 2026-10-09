@@ -63,6 +63,9 @@ Goal: the same certificate, but certbot may write to one TXT record only.
         --role "DNS Zone Contributor" \
         --scope /subscriptions/<subscription-id>/resourceGroups/dns1/providers/Microsoft.Network/dnszones/example.net/TXT/validation
 
+   For an Azure CLI login use ``--assignee-principal-type User``, see
+   :ref:`required-permissions`.
+
 2. Map the name to that record:
 
    .. code-block:: ini
