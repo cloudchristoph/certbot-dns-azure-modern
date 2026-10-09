@@ -15,7 +15,7 @@ Local setup
    git clone https://github.com/cloudchristoph/certbot-dns-azure-modern.git
    cd certbot-dns-azure-modern
    python -m venv .venv && . .venv/bin/activate
-   pip install certbot 'azure-identity>=1.19.0' 'azure-mgmt-dns>=8.2.0' 'azure-core>=1.32.0' pytest build
+   pip install certbot 'azure-identity>=1.19.0' 'azure-mgmt-dns>=8.2.0' 'azure-core>=1.38.0' pytest build
    pip install --no-deps -e .
 
 Unit tests

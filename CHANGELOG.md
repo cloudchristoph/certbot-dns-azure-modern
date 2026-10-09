@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Security
+
+- Require `azure-core>=1.38.0`. Older releases are affected by CVE-2026-21226
+  (deserialization of untrusted data); the previous lower bound `1.32.0` let pip keep
+  such a version when it was already installed in the target environment.
+
 ## 2.8.0 (2026-09-04)
 
 Every open upstream issue that can be fixed in code is addressed in this release, plus
