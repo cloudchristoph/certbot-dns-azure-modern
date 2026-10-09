@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 2.8.1 (2026-10-09)
+
+Security floor for `azure-core`, a fix for DNS delegation and reworked documentation.
+Nginx Proxy Manager 2.16 and later pick this release up automatically (`~=2.8.0`).
 
 ### Security
 
@@ -19,6 +22,18 @@
 
 - A weekly workflow audits the dependencies for known vulnerabilities, both the latest
   resolvable versions and the declared lower bounds.
+
+### Documentation
+
+- Reworked after a full review: quick start first, new pages for Nginx Proxy Manager
+  (portal steps, credentials box) and for switching from `certbot-dns-azure`, a guide
+  to choosing the authentication method and the role scope, and corrected facts
+  (client secrets expire after one year with the Azure CLI, the migration command now
+  restores module files removed by uninstalling a stacked upstream package).
+- When and how to raise `--dns-azure-propagation-seconds` (the default stays 10
+  seconds) and which Let's Encrypt errors mean the check came too early.
+- The PyPI page is now a short landing page, and the package homepage points to the
+  documentation site.
 
 ## 2.8.0 (2026-09-04)
 
