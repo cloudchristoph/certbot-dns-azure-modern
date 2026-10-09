@@ -27,6 +27,9 @@ class Authenticator(dns_common.DNSAuthenticator):
     description = ('Obtain certificates using a DNS TXT record (if you are using '
                    'Azure for DNS).')
     default_ttl = 120
+    # Microsoft states that record changes reach all Azure DNS name servers within 60
+    # seconds; certbot's generic default of 10 seconds is often but not always enough.
+    default_propagation_seconds = 60
 
     def __init__(self, *args, **kwargs):
         super(Authenticator, self).__init__(*args, **kwargs)
@@ -61,7 +64,8 @@ class Authenticator(dns_common.DNSAuthenticator):
 
     @classmethod
     def add_parser_arguments(cls, add):  # pylint: disable=arguments-differ
-        super(Authenticator, cls).add_parser_arguments(add)
+        super(Authenticator, cls).add_parser_arguments(
+            add, default_propagation_seconds=cls.default_propagation_seconds)
         add('config', help='Azure config INI file.')
         add('credentials', help='Azure config INI file. Fallback for legacy integrations')
         add('ttl', default=cls.default_ttl, type=int,

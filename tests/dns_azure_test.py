@@ -476,6 +476,14 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
         self.assertEqual(self.auth._get_ids_for_domain('a.sub.xyz.net', '_acme-challenge.a.sub.xyz.net')[0], 'sub.xyz.net')
         self.assertEqual(self.auth._get_ids_for_domain('other.xyz.net', '_acme-challenge.other.xyz.net')[0], 'xyz.net')
 
+    def test_parser_defaults(self):
+        from certbot_dns_azure._internal.dns_azure import Authenticator
+        add = mock.MagicMock()
+        Authenticator.add_parser_arguments(add)
+        defaults = {c.args[0]: c.kwargs.get('default') for c in add.call_args_list}
+        self.assertEqual(defaults['propagation-seconds'], 60)
+        self.assertEqual(defaults['ttl'], 120)
+
     def test_ttl_default(self):
         self.mock_client.record_sets.get.return_value = RecordSet(txt_records=[])
         self.auth.perform(SINGLE_DOMAIN)

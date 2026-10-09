@@ -17,6 +17,13 @@
 
 ### Changed
 
+- The default of `--dns-azure-propagation-seconds` is now 60 seconds instead of
+  certbot's generic 10. Microsoft states that changes reach all Azure DNS name servers
+  within 60 seconds; 10 seconds can be too short, and Let's Encrypt then checks
+  before every name server has the record. A certificate request now
+  takes about 50 seconds longer. Certificates whose propagation time was set
+  explicitly keep it; all others, including Nginx Proxy Manager with an empty
+  "Propagation Seconds" field, use the new default from their next renewal.
 - A weekly workflow audits the dependencies for known vulnerabilities, both the latest
   resolvable versions and the declared lower bounds.
 

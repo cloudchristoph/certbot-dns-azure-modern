@@ -56,14 +56,19 @@ Propagation time
 ----------------
 
 After creating the TXT record the plugin waits ``--dns-azure-propagation-seconds``
-(default 10) before the ACME server validates; certbot does not poll DNS. Microsoft
-states that changes reach all Azure DNS name servers within 60 seconds, usually much
-faster, so the default normally works. If validation fails intermittently, wait
-longer:
+(default 60) before the ACME server validates; certbot does not poll DNS. Microsoft
+states that changes reach all Azure DNS name servers within 60 seconds, so the default
+covers that guarantee. The wait happens once per certbot run, not per name.
+
+For faster interactive runs you can wait less, at the risk of an occasional failed
+validation:
 
 .. code-block:: bash
 
-   certbot certonly --authenticator dns-azure --dns-azure-propagation-seconds 60 ...
+   certbot certonly --authenticator dns-azure --dns-azure-propagation-seconds 15 ...
+
+A value given on the command line is stored for renewal; without one, renewals use
+the current default.
 
 How it works
 ------------

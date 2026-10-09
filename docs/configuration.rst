@@ -193,7 +193,7 @@ the following options to certbot, which are also accepted in
                                         pass ``--<plugin>-credentials``, such as Nginx Proxy
                                         Manager. Takes precedence if both are given.
 ``--dns-azure-propagation-seconds``     Seconds to wait after creating the TXT record before
-                                        the ACME server validates. Default: 10, see
+                                        the ACME server validates. Default: 60, see
                                         :ref:`propagation`.
 ``--dns-azure-ttl``                     TTL in seconds (whole number, at least 1) of the
                                         ``_acme-challenge`` TXT record. Default: 120.
