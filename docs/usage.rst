@@ -69,9 +69,10 @@ record. Wait longer, 30 seconds usually suffice, 60 cover Microsoft's guarantee:
 
    certbot certonly --authenticator dns-azure --dns-azure-propagation-seconds 30 ...
 
-A value given on the command line is stored for renewal. A single failed renewal is
-harmless: certbot's timer and Nginx Proxy Manager try again automatically, long
-before the certificate expires.
+A value given on the command line is stored for renewal. With renewal scheduled (see
+:ref:`renewal`; Nginx Proxy Manager does it by itself) a single failed renewal is
+harmless: the next run tries again, and renewals start 30 days before expiry. Without
+a schedule nothing retries, so check failed runs by hand.
 
 How it works
 ------------
