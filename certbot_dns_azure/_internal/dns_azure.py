@@ -328,16 +328,19 @@ class Authenticator(dns_common.DNSAuthenticator):
 
     @staticmethod
     def _get_relative_domain(fqdn: str, domain: str) -> str:
-        """Record name relative to ``domain``; ``@`` for the zone apex."""
+        """Record name relative to ``domain``; ``@`` for the zone apex.
+
+        A name that is not in the zone (an explicit dnsZones override pointing to another
+        zone, i.e. DNS delegation) keeps its full name: the validation record for
+        test.foo.com in zone bar.com is ``_acme-challenge.test.foo.com``.
+        """
         fqdn = fqdn.rstrip('.')
         domain = domain.rstrip('.')
         if fqdn.lower() == domain.lower():
             return '@'
         if fqdn.lower().endswith('.' + domain.lower()):
             return fqdn[:-(len(domain) + 1)]
-        # Not below the zone (e.g. an explicit dnsZones override pointing elsewhere):
-        # keep the previous behaviour of stripping the zone name wherever it appears.
-        return fqdn.replace(domain, '').strip('.')
+        return fqdn
 
     def _perform(self, domain, validation_name, validation):
         self._with_conflict_retry(domain, 'add', self._write_validation, domain, validation_name, validation)

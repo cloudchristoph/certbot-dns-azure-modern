@@ -337,6 +337,21 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
         self.assertEqual(call[1]['parameters'].txt_records[0].value[0],
                          SINGLE_DOMAIN[0].validation(SINGLE_DOMAIN[0].account_key))
 
+    def test_perform_zone_override_whose_name_occurs_in_the_domain(self):
+        # Delegation of example.com to the zone le.com: the record must be named
+        # _acme-challenge.example.com, not _acme-challenge.examp (le.com stripped).
+        self.auth.domain_zoneid = {
+            'example.com': '/subscriptions/c135abce-d87d-48df-936c-15596c6968a5/'
+                           'resourceGroups/dns1/providers/Microsoft.Network/dnsZones/le.com'
+        }
+        # _perform directly: perform() would re-read the config and replace the mapping
+        with mock.patch.object(self.auth, '_credential_for_domain',
+                               return_value=self.mock_credentials):
+            self.auth._perform('example.com', '_acme-challenge.example.com', 'token')
+        call = self.mock_client.record_sets.create_or_update.call_args
+        self.assertEqual(call[1]['zone_name'], 'le.com')
+        self.assertEqual(call[1]['relative_record_set_name'], '_acme-challenge.example.com')
+
     def test_cleanup_keeps_placeholder_and_foreign_values(self):
         # A record the user manages (record override) may hold the '-' placeholder next
         # to other values; cleanup removes only our own value and leaves the rest.
@@ -601,8 +616,12 @@ class AuthenticatorTest(test_util.TempDirTestCase, dns_test_common.BaseAuthentic
         # The zone name occurring inside a label must not be stripped
         self.assertEqual(rel('_acme-challenge.example.com.example.com', 'example.com'), '_acme-challenge.example.com')
         self.assertEqual(rel('_acme-challenge.Example.COM', 'example.com'), '_acme-challenge')
-        # Delegated validation into a different zone keeps the previous behaviour
+        # Delegated validation into a different zone keeps the full name
         self.assertEqual(rel('_acme-challenge.example.net', 'example.com'), '_acme-challenge.example.net')
+        self.assertEqual(rel('_acme-challenge.test.foo.com', 'bar.com'), '_acme-challenge.test.foo.com')
+        # ... even when the zone name occurs inside the name (le.com in example.com)
+        self.assertEqual(rel('_acme-challenge.example.com', 'le.com'), '_acme-challenge.example.com')
+        self.assertEqual(rel('_acme-challenge.Example.com.', 'LE.com'), '_acme-challenge.Example.com')
 
 
 if __name__ == "__main__":

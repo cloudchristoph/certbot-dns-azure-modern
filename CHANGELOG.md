@@ -8,6 +8,13 @@
   (deserialization of untrusted data); the previous lower bound `1.32.0` let pip keep
   such a version when it was already installed in the target environment.
 
+### Fixed
+
+- DNS delegation to a zone whose name occurs inside the requested domain (for example
+  the zone `le.com` for `example.com`) wrote the TXT record under a truncated name
+  (`_acme-challenge.examp` instead of `_acme-challenge.example.com`), so validation
+  failed. Names outside the target zone now always keep their full name.
+
 ### Changed
 
 - A weekly workflow audits the dependencies for known vulnerabilities, both the latest
