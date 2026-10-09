@@ -69,7 +69,10 @@ small as possible:
      --scope /subscriptions/<subscription-id>/resourceGroups/<resource-group>/providers/Microsoft.Network/dnszones/example.com
 
 ``<object-id>`` is the identity's object (principal) ID, for a service principal
-``az ad sp show --id <app-id> --query id -o tsv``. In the portal, use **DNS zone →
+``az ad sp show --id <app-id> --query id -o tsv``. Managed identities are service
+principals too. For the Azure CLI method the identity is your user: use
+``--assignee-principal-type User`` and the ID from ``az ad signed-in-user show --query
+id -o tsv``. In the portal, use **DNS zone →
 Access control (IAM) → Add role assignment**. New assignments can take up to 10
 minutes to become effective.
 
