@@ -56,7 +56,8 @@ Provider** and replace the template in **Credentials File Content** with:
    dns_azure_zone1 = example.com:<Resource ID of the resource group>
 
 Add one ``dns_azure_zone<N>`` line per zone. Leave **Propagation Seconds** empty to
-use the default; set it to 60 if validation fails intermittently.
+use the default of 10 seconds. If a request fails with ``No TXT record found``, request
+it again with 30; renewals that fail once are retried automatically every hour.
 
 Nginx Proxy Manager stores these credentials in plain text in its database (and,
 during each certbot run, in a file in the container). Scope the role assignment to the zone, as above, rather
