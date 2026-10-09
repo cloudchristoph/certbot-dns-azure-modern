@@ -8,6 +8,11 @@
   (deserialization of untrusted data); the previous lower bound `1.32.0` let pip keep
   such a version when it was already installed in the target environment.
 
+### Changed
+
+- A weekly workflow audits the dependencies for known vulnerabilities, both the latest
+  resolvable versions and the declared lower bounds.
+
 ## 2.8.0 (2026-09-04)
 
 Every open upstream issue that can be fixed in code is addressed in this release, plus
