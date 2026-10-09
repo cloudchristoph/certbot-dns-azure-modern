@@ -1,107 +1,113 @@
-DNS delegation
-==============
+DNS delegation and least privilege
+==================================
 
-DNS delegation, also called DNS aliasing, lets a secondary zone answer the
-``dns-01`` challenge on behalf of the primary one. To get a certificate for
-``example.com`` while the validation happens in ``example.org``, create a CNAME
-``_acme-challenge.example.com`` pointing at a record in ``example.org``. The ACME
-server follows the CNAME and checks the TXT record it ends up at.
+Certbot always asks the plugin for the validation record ``_acme-challenge.<name>``.
+A zone mapping can redirect where that record is written: to another zone, or to a
+single, pre-created TXT record. Combined with a CNAME in the primary zone (DNS
+delegation, also called DNS aliasing), the ACME server follows the CNAME and checks
+the TXT record it ends up at.
 
-Certbot itself knows nothing about such CNAMEs; it always asks the plugin to create
-``_acme-challenge.<name>``. This plugin therefore lets a zone mapping redirect where
-that record is actually written.
+Use this when:
 
-Typical reasons for delegation:
+- the primary zone has no API access, or is hosted with a provider that has no
+  certbot plugin, or
+- certbot should not get write access to the primary zone at all, or only to a single
+  record.
 
-- The primary zone is hosted somewhere without API access, or with a DNS provider
-  that has no certbot plugin.
-- Security: certbot should not get write access to the primary zone at all, or only
-  to a single record.
+The examples use ``example.com`` as the primary zone and ``example.net`` as the Azure
+DNS zone that certbot writes to, both in resource group ``dns1``.
 
-The examples below use ``foo.com`` as the primary zone and ``bar.com`` as the zone
-hosted in Azure that certbot writes to.
+Redirect to another zone
+------------------------
 
-Redirecting to another zone
+Goal: a certificate for ``test.example.com`` while certbot only writes to
+``example.net``.
+
+1. Map the name to the **zone's** resource ID instead of the resource group's:
+
+   .. code-block:: ini
+
+      dns_azure_zone1 = test.example.com:/subscriptions/<subscription-id>/resourceGroups/dns1/providers/Microsoft.Network/dnszones/example.net
+
+2. The plugin now writes the TXT record ``_acme-challenge.test.example.com`` into the
+   zone ``example.net``. Its full name is therefore
+   ``_acme-challenge.test.example.com.example.net``.
+
+3. Create this CNAME once in ``example.com``, by hand or at your DNS provider:
+
+   .. code-block:: text
+
+      _acme-challenge.test.example.com.  CNAME  _acme-challenge.test.example.com.example.net.
+
+   Add one such CNAME per name in the certificate; ``*.test.example.com`` shares the
+   one for ``test.example.com``.
+
+The identity needs DNS Zone Contributor on ``example.net`` only.
+
+Redirect to a single record
 ---------------------------
 
-Goal: a certificate for ``test.foo.com``. Certbot will ask for the validation record
-``_acme-challenge.test.foo.com``. Without API access to ``foo.com``, create this
-CNAME there once, by hand:
+Goal: the same certificate, but certbot may write to one TXT record only.
 
-.. code-block:: text
+1. Create the TXT record ``validation`` in ``example.net`` with the value ``-``, and
+   assign DNS Zone Contributor on that record alone:
 
-   _acme-challenge.test.foo.com.  CNAME  _acme-challenge.test.foo.com.bar.com.
+   .. code-block:: bash
 
-Then map ``test.foo.com`` to the ``bar.com`` zone by using the **zone's** resource
-id instead of the resource group's:
+      az network dns record-set txt add-record \
+        --resource-group dns1 --zone-name example.net \
+        --record-set-name validation --value '-'
+
+      az role assignment create \
+        --assignee-object-id <object-id> --assignee-principal-type ServicePrincipal \
+        --role "DNS Zone Contributor" \
+        --scope /subscriptions/<subscription-id>/resourceGroups/dns1/providers/Microsoft.Network/dnszones/example.net/TXT/validation
+
+2. Map the name to that record:
+
+   .. code-block:: ini
+
+      dns_azure_zone1 = test.example.com:/subscriptions/<subscription-id>/resourceGroups/dns1/providers/Microsoft.Network/dnszones/example.net/TXT/validation
+
+3. Point the CNAME in ``example.com`` at the record; the target name is free:
+
+   .. code-block:: text
+
+      _acme-challenge.test.example.com.  CNAME  validation.example.net.
+
+.. important::
+   The record must exist before the first certbot run; the identity is not allowed to
+   create it.
+
+Least privilege without delegation
+----------------------------------
+
+The record mapping also works inside the primary zone, without a CNAME. Create the TXT
+record ``_acme-challenge.test`` in ``example.com`` with the value ``-``, assign the role
+on that record as above, and map:
 
 .. code-block:: ini
 
-   dns_azure_zone1 = test.foo.com:/subscriptions/c135abce-d87d-48df-936c-15596c6968a5/resourceGroups/dns1/providers/Microsoft.Network/dnszones/bar.com
+   dns_azure_zone1 = test.example.com:/subscriptions/<subscription-id>/resourceGroups/dns1/providers/Microsoft.Network/dnszones/example.com/TXT/_acme-challenge.test
 
-When the plugin is asked to create ``_acme-challenge.test.foo.com``, the target zone
-is overridden to ``bar.com`` and the record is created there under the full name
-``_acme-challenge.test.foo.com.bar.com``. That is why the CNAME above has to carry
-the whole ``_acme-challenge.test.foo.com`` prefix in front of ``bar.com``.
+The record name is the one certbot would have used anyway, but the plugin only ever
+touches this one record.
 
-Redirecting to a single record
+Record mappings and subdomains
 ------------------------------
 
-Instead of granting certbot write access to a whole zone, you can point the mapping
-at one specific TXT record set and grant the DNS Zone Contributor role on that record
-only.
+A mapping that names a record serves every name it matches from that one record:
+``test.example.com``, ``*.test.example.com`` and also deeper names such as
+``www.test.example.com``. The first two validate at
+``_acme-challenge.test.example.com`` and work. A deeper name validates at its own
+``_acme-challenge`` name: with delegation, give it its own CNAME to the same record;
+without delegation, give it its own mapping and record.
 
-Again the goal is a certificate for ``test.foo.com``. This time the CNAME can point
-at any name, it does not have to contain ``_acme-challenge``:
+Why the record is never deleted
+-------------------------------
 
-.. code-block:: text
-
-   _acme-challenge.test.foo.com.  CNAME  test_validation.bar.com.
-
-The mapping names the record set explicitly:
-
-.. code-block:: ini
-
-   dns_azure_zone1 = test.foo.com:/subscriptions/c135abce-d87d-48df-936c-15596c6968a5/resourceGroups/dns1/providers/Microsoft.Network/dnszones/bar.com/TXT/test_validation
-
-This **requires** you to create the TXT record ``test_validation`` in ``bar.com`` up
-front with the value ``-``, and to give certbot's identity write access to it:
-
-.. code-block:: bash
-
-   az network dns record-set txt add-record \
-     --resource-group dns1 --zone-name bar.com \
-     --record-set-name test_validation --value '-'
-
-   az role assignment create \
-     --assignee <identity> \
-     --role "DNS Zone Contributor" \
-     --scope /subscriptions/c135abce-d87d-48df-936c-15596c6968a5/resourceGroups/dns1/providers/Microsoft.Network/dnszones/bar.com/TXT/test_validation
-
-Now both the zone and the record name are overridden; the plugin writes the
-validation token into ``test_validation`` in ``bar.com``, which is exactly where
-the ACME server ends up after following the CNAME.
-
-Why the record must exist and is never deleted
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Role assignments on an individual record are attached to that resource. If the
-plugin deleted the record after validation, the assignment would be gone as well and
-the next renewal would fail with an authorization error. For this reason, whenever
-a mapping contains a record id, the plugin does not delete the record on cleanup; it
-resets its value to ``-`` (the value you were told to set initially).
-
-Restricting permissions without delegation
-------------------------------------------
-
-The record-level mapping also works inside the primary zone, for setups that only
-want to limit certbot's permissions and do not need a CNAME. For ``test.foo.com``,
-create the TXT record ``_acme-challenge.test`` in the ``foo.com`` zone with the value
-``-``, assign the role on that record, and map:
-
-.. code-block:: ini
-
-   dns_azure_zone1 = test.foo.com:/subscriptions/c135abce-d87d-48df-936c-15596c6968a5/resourceGroups/dns1/providers/Microsoft.Network/dnszones/foo.com/TXT/_acme-challenge.test
-
-The zone stays ``foo.com`` and the record name is the one certbot would have used
-anyway, but now the plugin only ever touches this one record and never deletes it.
+A role assignment on a single record is tied to that resource. If the plugin deleted
+the record after validation, the next renewal would fail with an authorization error.
+For a record mapping the plugin therefore removes only its own token and resets the
+value to ``-`` once no tokens are left. Each write also sets the record's TTL to
+``--dns-azure-ttl``.

@@ -47,16 +47,14 @@ a production zone) plus the following environment variables:
           EMAIL=you@example.com
    pytest -rA azure_tests/
 
-The tests authenticate with the Azure CLI credential of the current login and only
-delete ``_acme-challenge*`` TXT records that they created themselves. The required
+The tests authenticate with the current Azure CLI login, or with a service principal
+when ``AZURE_CLIENT_ID`` and ``AZURE_CLIENT_SECRET`` are set, and only delete
+``_acme-challenge*`` TXT records that they created themselves. The required
 zone layout (a base zone with static CNAME/TXT records for the delegation tests plus
 the delegated ``zone1`` and ``zone2``) is described at the top of
 ``azure_tests/integration_test.py``.
 
-In CI the integration tests are a required check for pull requests that change code
-(documentation-only changes skip them), run again on release tags before publishing,
-and once a week against the latest certbot and Azure SDK releases to catch breaking
-upstream changes early.
+CI runs them on pull requests that change code, on release tags and once a week.
 
 Dependency audit
 ----------------
@@ -75,16 +73,16 @@ locally:
    uv pip compile setup.py --resolution lowest-direct > /tmp/resolved.txt
    uvx pip-audit --no-deps --disable-pip -r /tmp/resolved.txt --vulnerability-service osv
 
-Building the docs
------------------
+Build the docs
+--------------
 
 .. code-block:: bash
 
    pip install -r docs/requirements.txt
    sphinx-build -W -b html docs docs/_build/html
 
-The docs are published to GitHub Pages by ``.github/workflows/docs.yml`` on every
-push to ``main``. Pull requests only build them.
+``.github/workflows/docs.yml`` publishes them to GitHub Pages when a push to ``main``
+changes ``docs/``, ``CHANGELOG.md`` or ``setup.py``. Pull requests only build them.
 
 Release checklist
 -----------------

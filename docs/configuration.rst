@@ -1,31 +1,12 @@
 Configuration
 =============
 
-Command-line options
---------------------
-
-The plugin adds the following options to certbot. They are also accepted in
-``/etc/letsencrypt/cli.ini`` without the leading dashes.
-
-======================================  ========================================================
-``--dns-azure-config``                  Path to the config file described below. (Required)
-``--dns-azure-credentials``             Alias for ``--dns-azure-config``, kept for integrations
-                                        that pass a ``--<plugin>-credentials`` option, such as
-                                        Nginx Proxy Manager.
-``--dns-azure-propagation-seconds``     Seconds to wait after creating the TXT record before
-                                        asking the ACME server to validate. Default: 10.
-``--dns-azure-ttl``                     TTL in seconds of the ``_acme-challenge`` TXT record
-                                        the plugin creates. Default: 120.
-======================================  ========================================================
-
-Select the plugin with ``--authenticator dns-azure`` (or ``-a dns-azure``).
-
 The config file
 ---------------
 
-All settings that are specific to your Azure setup live in one INI-style file of
-``key = value`` lines. It contains the credentials (or the choice of a credential
-method) and the mapping from DNS zones to their location in Azure:
+All settings for your Azure setup live in one INI file of ``key = value`` lines: the
+credentials (or the choice of a credential method) and the mapping from DNS zones to
+their location in Azure.
 
 .. code-block:: ini
    :caption: /etc/letsencrypt/azure.ini
@@ -34,14 +15,13 @@ method) and the mapping from DNS zones to their location in Azure:
    dns_azure_sp_client_secret = example-client-secret-not-real
    dns_azure_tenant_id = ed1090f3-ab18-4b12-816c-599af8a88cf7
 
-   dns_azure_environment = "AzurePublicCloud"
-
    dns_azure_zone1 = example.com:/subscriptions/c135abce-d87d-48df-936c-15596c6968a5/resourceGroups/dns1
    dns_azure_zone2 = example.org:/subscriptions/99800903-fb14-4992-9aff-12eaf2744622/resourceGroups/dns2
 
-The path is given with ``--dns-azure-config`` or entered interactively. Certbot
-records the path for renewal but does not store the file's contents, so keep the file
-in place.
+The IDs in the examples are made up. Pass the path with ``--dns-azure-config``;
+certbot asks for it if the option is missing. Keep the file in place, renewals read
+it again (see :ref:`renewal`). In Nginx Proxy Manager the same content goes into the
+credentials box, see :doc:`nginx-proxy-manager`.
 
 Keys
 ~~~~
@@ -53,44 +33,48 @@ Key                                              Meaning
                                                  required; ``N`` is any unique number.
 ``dns_azure_environment``                        Azure cloud, see :ref:`azure-environment`.
                                                  Default ``AzurePublicCloud``.
-``dns_azure_sp_client_id``                       Service principal (application) client id.
-``dns_azure_sp_client_secret``                   Service principal client secret.
-``dns_azure_sp_certificate_path``                Path to a PEM certificate with private key,
+``dns_azure_sp_client_id``                       Client ID of a service principal (app
+                                                 registration).
+``dns_azure_sp_client_secret``                   Client secret of the service principal.
+``dns_azure_sp_certificate_path``                Path to a certificate file with private key,
                                                  alternative to the client secret.
-``dns_azure_tenant_id``                          Entra ID tenant id. Required for service
-                                                 principals.
-``dns_azure_msi_client_id``                      Client id of a user-assigned managed
+``dns_azure_tenant_id``                          Entra ID tenant ID. Required for service
+                                                 principals; pins the tenant for the Azure
+                                                 CLI and workload identity.
+``dns_azure_msi_client_id``                      Client ID of a user-assigned managed
                                                  identity.
 ``dns_azure_msi_system_assigned``                ``true`` to use the system-assigned
                                                  managed identity.
 ``dns_azure_use_cli_credentials``                ``true`` to use the Azure CLI login.
-``dns_azure_use_workload_identity_credentials``  ``true`` to use Azure Workload Identity.
+``dns_azure_use_workload_identity_credentials``  ``true`` to use workload identity.
 ===============================================  =============================================
 
-Exactly one authentication method should be configured. The methods and what each
-one needs are described in :doc:`authentication`.
+Boolean keys accept ``true``, ``yes``, ``on`` or ``1`` in any case; every other value,
+including a typo, counts as off. Which keys each authentication method needs is
+described in :doc:`authentication`.
 
 Zone mappings
 -------------
 
 Azure DNS zones can live in any resource group of any subscription, so the plugin
 needs to be told where each zone is. Each ``dns_azure_zone<N>`` line maps a domain to
-an Azure resource id:
+an Azure resource ID:
 
 .. code-block:: text
 
    dns_azure_zone1 = DOMAIN:RESOURCE_ID
 
 - ``DOMAIN`` is the name of the DNS zone in Azure, for example ``example.com``.
-- ``RESOURCE_ID`` is normally the id of the resource group that holds the zone:
-  ``/subscriptions/<subscription id>/resourceGroups/<resource group>``. The zone name
+- ``RESOURCE_ID`` is normally the ID of the resource group that holds the zone,
+  ``/subscriptions/<subscription-id>/resourceGroups/<resource-group>``. The zone name
   is taken from ``DOMAIN``.
 
-  It can also be the id of a DNS zone (``.../providers/Microsoft.Network/dnszones/<zone>``)
-  or even of a single TXT record set. Those forms redirect the validation record to a
-  different zone or record and are explained in :doc:`dns-delegation`.
+  It can also be the ID of a DNS zone (``.../providers/Microsoft.Network/dnszones/<zone>``)
+  or of a single TXT record set. Those forms redirect the validation record to a
+  different zone or record, see :doc:`dns-delegation`.
 
-The resource group id can be looked up with the Azure CLI:
+The resource group ID is shown in the portal under **resource group → Properties →
+Resource ID**, or with the Azure CLI:
 
 .. code-block:: bash
 
@@ -99,19 +83,16 @@ The resource group id can be looked up with the Azure CLI:
 How domains are matched
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-When certbot asks for a certificate for a name, the plugin picks the configured
-``DOMAIN`` that the name equals or is a subdomain of, trying the longest configured
-domain first. One mapping for ``example.com`` therefore covers ``www.example.com``,
-``*.example.com`` and any deeper subdomain, as long as they are all served from the
-``example.com`` zone. Matching happens on label boundaries: ``myexample.com`` is not
-covered by ``example.com`` and needs its own mapping.
+For every name in the certificate, the plugin picks the configured ``DOMAIN`` that the
+name equals or is a subdomain of; the longest configured domain wins. One mapping for
+``example.com`` therefore covers ``www.example.com``, ``*.example.com`` and any deeper
+subdomain, as long as they are all served from the ``example.com`` zone. Matching
+happens on label boundaries and ignores case: ``myexample.com`` is not covered by
+``example.com`` and needs its own mapping.
 
 If a subdomain is its own zone in Azure (say ``dev.example.com`` is delegated to a
 separate zone), add a mapping for it as well; the longer match wins and the TXT
 record is created in the subdomain's zone.
-
-A name that matches none of the configured domains fails with
-``Domain <name> does not have a valid domain to resource group id mapping``.
 
 .. _credential-sets:
 
@@ -140,37 +121,44 @@ Rules:
 
 - The section name is free; it only labels the credential set in error messages.
 - A section takes the same authentication keys as the top level, so every method from
-  :doc:`authentication` works per section, including managed identities and the Azure
-  CLI. ``dns_azure_environment`` is global and applies to all sets.
-- A section without any authentication keys uses the top-level credentials; it is
-  merely a way to group zones.
-- Zone numbering restarts in every section. A zone may appear in one set only.
-- The top-level credentials can be left out entirely when every zone is in a section
-  that has credentials of its own.
+  :doc:`authentication` works per section. ``dns_azure_environment`` is global.
+- A section without authentication keys uses the top-level credentials; it merely
+  groups zones.
+- Zone numbering restarts in every section. Each zone may be mapped only once across
+  all sets.
+- The top-level credentials can be left out when every zone is in a section with
+  credentials of its own.
 - Domain matching works across all sets: the longest configured domain wins, and the
-  credentials of the set it belongs to are used for that name. A certificate can
-  therefore span zones from several sets.
+  credentials of its set are used for that name. A certificate can therefore span
+  zones from several sets.
 
 .. _azure-environment:
 
 Azure environment
 -----------------
 
-The plugin talks to the Azure public cloud by default. For sovereign clouds set
+The plugin talks to the Azure public cloud by default. For a sovereign cloud set
 ``dns_azure_environment`` in the config file or the ``AZURE_ENVIRONMENT`` environment
-variable; the config file takes precedence. This changes both the Resource Manager
-endpoint and the Entra ID authority used for authentication.
+variable; the config file takes precedence. Values are case-insensitive and differ
+from the cloud names of the Azure CLI.
 
 ============================  ==========================================
 Value                         Resource Manager endpoint
 ============================  ==========================================
-``AzurePublicCloud``          https://management.azure.com/
-``AzureUSGovernmentCloud``    https://management.usgovcloudapi.net/
-``AzureChinaCloud``           https://management.chinacloudapi.cn/
+``AzurePublicCloud``          ``https://management.azure.com/``
+``AzureUSGovernmentCloud``    ``https://management.usgovcloudapi.net/``
+``AzureChinaCloud``           ``https://management.chinacloudapi.cn/``
 ============================  ==========================================
 
-Protecting the config file
---------------------------
+The environment selects the Resource Manager endpoint for every method and the
+Entra ID sign-in authority for service principals. Managed identities, the Azure CLI
+(``az cloud set``) and workload identity get their tokens from the platform, which
+already knows its cloud.
+
+.. _protect-config:
+
+Protect the config file
+-----------------------
 
 .. caution::
    Treat the config file like the password to your Azure account. Anyone who can
@@ -178,15 +166,35 @@ Protecting the config file
    certbot run with it can obtain certificates for every domain the identity has
    access to.
 
-Restrict the file to the user that runs certbot:
+Restrict the file, and a certificate file if you use one, to the user that runs
+certbot:
 
 .. code-block:: bash
 
    chmod 600 /etc/letsencrypt/azure.ini
 
-Certbot warns with ``Unsafe permissions on configuration file`` every time it uses a
-file that other users can read, including on renewal. The warning cannot be silenced
-other than by fixing the permissions.
+Certbot warns with ``Unsafe permissions on credentials configuration file`` on every
+run, including renewals, as long as other users have any access to the file.
 
-Where possible prefer a credential method without secrets in the file, such as a
-managed identity or workload identity, see :doc:`authentication`.
+Prefer, in this order: a managed identity or workload identity, which keep no secret
+in the file; a service principal with a certificate; a client secret only where
+nothing else works, with a short lifetime (see :ref:`secret-expiry`).
+
+Command-line options
+--------------------
+
+Select the plugin with ``--authenticator dns-azure`` (or ``-a dns-azure``). It adds
+the following options to certbot, which are also accepted in
+``/etc/letsencrypt/cli.ini`` without the leading dashes.
+
+======================================  ========================================================
+``--dns-azure-config``                  Path to the config file. Prompted for if missing.
+``--dns-azure-credentials``             Alias for ``--dns-azure-config`` for integrations that
+                                        pass ``--<plugin>-credentials``, such as Nginx Proxy
+                                        Manager. Takes precedence if both are given.
+``--dns-azure-propagation-seconds``     Seconds to wait after creating the TXT record before
+                                        the ACME server validates. Default: 10, see
+                                        :ref:`propagation`.
+``--dns-azure-ttl``                     TTL in seconds (whole number, at least 1) of the
+                                        ``_acme-challenge`` TXT record. Default: 120.
+======================================  ========================================================
