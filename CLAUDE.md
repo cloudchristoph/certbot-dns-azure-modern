@@ -27,16 +27,22 @@ certbot 5.x with pyOpenSSL 26; installing the plugin downgrades certbot/acme to 
 acme 3.3.0 no longer imports against pyOpenSSL 26
 (`AttributeError: module 'OpenSSL.crypto' has no attribute 'X509Extension'`).
 Tracking issue: https://github.com/NginxProxyManager/nginx-proxy-manager/issues/5606.
-Upstream PR fixing the pin (#65) has been open since Feb 2026 with no maintainer response.
+Upstream PR fixing the pin (#65) has been open since October 2025 with no maintainer response.
 The plugin code itself works unchanged with certbot 5.x; only the pin was the problem.
 
 ## Layout
 
 - `certbot_dns_azure/_internal/dns_azure.py` - the plugin (single file, ~370 lines).
 - `certbot_dns_azure/__init__.py` - short module docstring pointing at the docs site.
-- `docs/*.rst` - user documentation (installation, configuration, authentication, usage,
-  DNS delegation, troubleshooting, development); `docs/changelog.rst` includes
-  `CHANGELOG.md` via myst-parser. Build with `sphinx-build -W`, warnings are errors.
+- `docs/*.rst` - user documentation. Get started: index (quick start), installation,
+  nginx-proxy-manager, migrating. Guides: authentication, configuration, usage,
+  dns-delegation, troubleshooting. Project: changelog, development.
+  `docs/changelog.rst` includes `CHANGELOG.md` via myst-parser. Build with
+  `sphinx-build -n -W`, warnings are errors. Each fact has one home page; other pages
+  link to it instead of repeating it (fork history lives in migrating.rst). Use
+  "ID" (not "id"), `<subscription-id>` style placeholders in commands, made-up GUIDs
+  only in INI examples. The README is the PyPI page: keep it a short landing page
+  with absolute links to the docs site.
 - `tests/dns_azure_test.py` - unit tests, mock the Azure SDK. Use `_dns01_challenge()` and
   `_domain()` helpers; they hide the certbot 5 `domain=` -> `identifier=` deprecation.
 - `azure_tests/integration_test.py` - real certificate issuance (Let's Encrypt staging)

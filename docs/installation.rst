@@ -1,82 +1,48 @@
 Installation
 ============
 
+For Nginx Proxy Manager 2.16 or later there is nothing to install, see
+:doc:`nginx-proxy-manager`. To replace the upstream package ``certbot-dns-azure``,
+see :doc:`migrating`.
+
 Requirements
 ------------
 
 - Python 3.10 or newer (tested on 3.10 to 3.13).
 - certbot 3.0 or newer. There is deliberately no upper bound, so the plugin never
   forces pip to downgrade an existing certbot.
-- The Azure SDK packages (``azure-identity``, ``azure-mgmt-dns``, ``azure-core``) are
-  installed automatically as dependencies.
+- The Azure SDK packages (``azure-identity``, ``azure-mgmt-dns`` 8.x or 9.x,
+  ``azure-core``) are installed automatically as dependencies.
 
-The plugin has to be installed into the same Python environment as certbot itself,
-otherwise certbot cannot find it.
+The plugin must be installed into the same Python environment as certbot.
 
 pip
 ---
 
-.. code-block:: bash
-
-   pip install certbot certbot-dns-azure-modern
-
-Replacing the upstream package
-------------------------------
-
-``certbot-dns-azure`` (upstream) and ``certbot-dns-azure-modern`` (this fork) ship the
-same Python module and the same certbot entry point. Never install both at once;
-replace the upstream package instead:
+A dedicated virtual environment keeps certbot and the plugin apart from the system
+Python:
 
 .. code-block:: bash
 
-   pip uninstall certbot-dns-azure
-   pip install -U certbot certbot-dns-azure-modern
+   python3 -m venv /opt/certbot
+   /opt/certbot/bin/pip install certbot certbot-dns-azure-modern
+   ln -s /opt/certbot/bin/certbot /usr/local/bin/certbot
 
-The ``-U`` matters: if the upstream package already downgraded certbot and acme to
-3.3.0, installing the fork on top does not undo that. Upgrading certbot explicitly
-(or recreating the virtual environment) does.
-
-Nginx Proxy Manager
--------------------
-
-Nginx Proxy Manager 2.16.0 and later use this package for the "Azure" DNS provider
-(`NginxProxyManager#5831 <https://github.com/NginxProxyManager/nginx-proxy-manager/pull/5831>`_).
-Nothing needs to be installed: pick "Azure" as DNS provider in the web UI and paste the
-content of the config file into the credentials text box, see :doc:`configuration`.
-Nginx Proxy Manager installs the plugin with ``pip`` into its bundled certbot
-environment on first use.
-
-Nginx Proxy Manager 2.15.x still installs the broken upstream package. Upgrade to
-2.16.0 or later and recreate the container, so that a certbot downgraded by the
-upstream plugin is not left behind:
-
-.. code-block:: bash
-
-   docker compose pull && docker compose up -d --force-recreate
-
-If you used the earlier workaround and bind-mounted a patched
-``/app/certbot/dns-plugins.json`` into the container, remove that volume when
-upgrading. The patched copy replaces the whole plugin list of the image, so it would
-also hide later updates to other DNS plugins.
-
-Verify inside the container that certbot kept the image version and sees the plugin:
-
-.. code-block:: bash
-
-   docker exec nginx-proxy-manager bash -c \
-     '. /opt/certbot/bin/activate && certbot --version && certbot plugins --text | grep -A1 dns-azure'
-
-The plugin is only installed after the first certificate request with the "Azure"
-provider; before that, ``dns-azure`` is not listed.
+If certbot already lives in a virtual environment, install the plugin with that
+environment's ``pip``. Do not combine a certbot from the distribution's packages with
+a plugin from PyPI (recent distributions refuse ``pip install`` into the system Python,
+PEP 668); install certbot itself with pip as shown.
 
 Docker
 ------
 
 The repository contains a minimal ``Docker/Dockerfile`` based on Alpine that installs
-certbot and the plugin from PyPI:
+certbot and the plugin from PyPI; no image is published, build it yourself:
 
 .. code-block:: bash
 
+   git clone https://github.com/cloudchristoph/certbot-dns-azure-modern.git
+   cd certbot-dns-azure-modern
    docker build -t certbot-dns-azure -f Docker/Dockerfile Docker/
    docker run -it --rm \
      -v /etc/letsencrypt:/etc/letsencrypt \
@@ -87,29 +53,21 @@ certbot and the plugin from PyPI:
        --agree-tos --email admin@example.com --non-interactive \
        -d example.com -d '*.example.com'
 
-Snap
-----
+.. _verify-installation:
 
-The ``certbot-dns-azure`` snap in the Snap Store is published by the upstream author
-and still ships 2.6.1. This fork does not publish a snap. Use pip or Docker instead.
-
-Verifying the installation
---------------------------
+Verify the installation
+-----------------------
 
 .. code-block:: bash
 
    certbot plugins --text
 
-The output should list the plugin:
+The output should start the plugin's entry with:
 
 .. code-block:: text
 
    * dns-azure
    Description: Obtain certificates using a DNS TXT record (if you are using Azure
    for DNS).
-   Interfaces: Authenticator, Plugin
-   Entry point: dns-azure = certbot_dns_azure._internal.dns_azure:Authenticator
 
-If it is missing, the plugin was installed into a different Python environment than
-certbot. Check with ``pip show certbot certbot-dns-azure-modern`` that both report the
-same location.
+If it is missing, see :ref:`plugin-not-listed`.

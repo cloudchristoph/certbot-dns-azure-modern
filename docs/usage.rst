@@ -1,100 +1,81 @@
 Usage
 =====
 
-All examples assume a config file at ``/etc/letsencrypt/azure.ini`` as described in
+The examples assume a config file at ``/etc/letsencrypt/azure.ini`` as described in
 :doc:`configuration`.
 
-Obtaining a certificate
------------------------
+Get a certificate
+-----------------
 
 .. code-block:: bash
 
    certbot certonly \
      --authenticator dns-azure \
      --dns-azure-config /etc/letsencrypt/azure.ini \
-     -d example.com
+     -d example.com -d '*.example.com' -d example.org
 
-Several names, including names from different zones, can go into one certificate
-as long as every zone has a mapping in the config file:
+- One certificate can hold several names, also from different zones, as long as every
+  zone has a mapping in the config file.
+- Wildcards need the ``dns-01`` challenge, which is what this plugin provides. Quote
+  them so the shell does not expand the ``*``.
+- In scripts and containers add ``--non-interactive --agree-tos --email
+  admin@example.com`` so certbot never prompts.
 
-.. code-block:: bash
+Test first
+----------
 
-   certbot certonly \
-     --authenticator dns-azure \
-     --dns-azure-config /etc/letsencrypt/azure.ini \
-     -d example.com \
-     -d www.example.com \
-     -d example.org
+Add ``--dry-run`` to run the whole process against the Let's Encrypt staging server
+without saving a certificate. Staging has much higher rate limits, so use it while
+you get the configuration right.
 
-Wildcard certificates require the ``dns-01`` challenge, so they are a natural fit.
-Quote the name to keep the shell from expanding it:
-
-.. code-block:: bash
-
-   certbot certonly \
-     --authenticator dns-azure \
-     --dns-azure-config /etc/letsencrypt/azure.ini \
-     -d example.com \
-     -d '*.example.com'
-
-Non-interactive use
--------------------
-
-For scripts, containers and cron jobs, add the usual certbot options so it never
-prompts:
-
-.. code-block:: bash
-
-   certbot certonly \
-     --authenticator dns-azure \
-     --dns-azure-config /etc/letsencrypt/azure.ini \
-     --non-interactive \
-     --agree-tos \
-     --email admin@example.com \
-     -d example.com
+.. _renewal:
 
 Renewal
 -------
 
-Certbot stores the plugin name and the path of the config file in the renewal
-configuration under ``/etc/letsencrypt/renewal/``. A plain
+Certbot stores the plugin name and the path of the config file in
+``/etc/letsencrypt/renewal/``, so a plain ``certbot renew`` renews every certificate,
+including those issued through this plugin, as long as the config file is still at
+that path and its credentials are valid.
 
-.. code-block:: bash
+Installing certbot with pip does not schedule renewals. Run ``certbot renew`` twice a
+day, for example with ``/etc/cron.d/certbot``:
 
-   certbot renew
+.. code-block:: text
 
-renews all certificates, including those issued through this plugin, as long as the
-config file is still at the recorded path and the credentials in it are valid.
-Nothing needs to be passed on the command line.
+   0 3,15 * * * root /opt/certbot/bin/certbot renew --quiet
+
+See `Setting up automated renewal
+<https://eff-certbot.readthedocs.io/en/stable/using.html#setting-up-automated-renewal>`_
+in the certbot documentation for systemd timers. ``certbot renew --dry-run`` tests the
+renewal of all certificates, which is worth doing after rotating a secret.
+
+.. _propagation:
 
 Propagation time
 ----------------
 
-After creating the TXT record, the plugin waits ``--dns-azure-propagation-seconds``
-(default 10) before certbot asks the ACME server to validate. Azure DNS publishes
-changes within seconds, so the default is usually fine. Increase it if validation
-fails intermittently, for example when the zone is behind a resolver with
-aggressive caching:
+After creating the TXT record the plugin waits ``--dns-azure-propagation-seconds``
+(default 10) before the ACME server validates; certbot does not poll DNS. Microsoft
+states that changes reach all Azure DNS name servers within 60 seconds, usually much
+faster, so the default normally works. If validation fails intermittently, wait
+longer:
 
 .. code-block:: bash
 
-   certbot certonly --authenticator dns-azure --dns-azure-propagation-seconds 30 ...
+   certbot certonly --authenticator dns-azure --dns-azure-propagation-seconds 60 ...
 
-What the plugin does
---------------------
+How it works
+------------
 
-For every name in the certificate request the plugin
+For every name in the certificate the plugin:
 
-1. picks the matching zone mapping from the config file (longest matching domain
-   wins, see :doc:`configuration`),
-2. creates or updates the TXT record set ``_acme-challenge.<name>`` in that zone
-   with the validation token and a TTL of 120 seconds (``--dns-azure-ttl``); existing values in the
-   record set are preserved, so several certbot runs against the same name can
-   overlap,
-3. waits for the propagation time and lets certbot complete the challenge,
-4. removes its token from the record set again and deletes the record set once it
-   holds no other values.
+1. Picks the zone mapping (longest matching domain, see :doc:`configuration`).
+2. Adds the validation token to the TXT record set ``_acme-challenge.<name>`` with the
+   TTL of ``--dns-azure-ttl`` (default 120 seconds). Existing values are kept, so
+   overlapping certbot runs for the same name do not overwrite each other.
+3. Waits for the propagation time while certbot completes the challenge.
+4. Removes its token again and deletes the record set once no values are left.
 
-When the mapping points at a specific TXT record instead of a zone (see
-:doc:`dns-delegation`), the record is never deleted; its value is reset to ``-``
-so that role assignments on the record survive.
+A mapping that names a single TXT record works differently: that record is never
+deleted, see :doc:`dns-delegation`.
