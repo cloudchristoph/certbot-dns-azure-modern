@@ -45,6 +45,10 @@ The plugin code itself works unchanged with certbot 5.x; only the pin was the pr
   publishing (GitHub environment `pypi`), GitHub release.
 - `.github/dependabot.yml` - weekly grouped updates of the GitHub Actions only; the
   Python dependencies stay version ranges and are covered by the weekly workflow run.
+- `.github/workflows/dependency-audit.yml` - weekly `pip-audit` (OSV) of the runtime
+  dependencies, resolved both to the latest versions and to the `setup.py` lower bounds;
+  a lower bound that admits a vulnerable release has to be raised. Scheduled failures
+  open an issue.
 - `.github/workflows/docs.yml` - builds the Sphinx docs (`docs/`) and deploys them to
   GitHub Pages (https://cloudchristoph.github.io/certbot-dns-azure-modern/) on push to `main`.
   Pages is configured with source "GitHub Actions"; no Read the Docs project.

@@ -58,6 +58,23 @@ In CI the integration tests are a required check for pull requests that change c
 and once a week against the latest certbot and Azure SDK releases to catch breaking
 upstream changes early.
 
+Dependency audit
+----------------
+
+``.github/workflows/dependency-audit.yml`` checks the runtime dependencies against
+the OSV vulnerability database every Monday, on manual dispatch and on pull requests
+that change ``setup.py``. It audits two resolutions on Python 3.10 and 3.13: the
+latest versions a fresh install gets, and the declared lower bounds. pip keeps an
+older, already installed version as long as it satisfies the bound, so a finding in
+the lower-bound run means the bound in ``setup.py`` has to be raised. A failing
+scheduled run opens an issue (or comments on the open one). To run the same check
+locally:
+
+.. code-block:: bash
+
+   uv pip compile setup.py --resolution lowest-direct > /tmp/resolved.txt
+   uvx pip-audit --no-deps --disable-pip -r /tmp/resolved.txt --vulnerability-service osv
+
 Building the docs
 -----------------
 
