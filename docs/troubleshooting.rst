@@ -8,7 +8,7 @@ the zone it picked and the Azure API errors in full.
 -------------------------------------------------------------------------------
 
 Certbot itself fails to start, typically right after installing an Azure DNS plugin
-in Nginx Proxy Manager 2.15 or later. The upstream package ``certbot-dns-azure``
+in Nginx Proxy Manager 2.15. The upstream package ``certbot-dns-azure``
 pins ``certbot<4.0``, so pip downgraded certbot and acme to 3.3.0, and that acme
 release does not import against pyOpenSSL 26.
 
@@ -20,7 +20,7 @@ virtual environment:
    pip uninstall certbot-dns-azure
    pip install -U certbot certbot-dns-azure-modern
 
-In Nginx Proxy Manager, patch ``dns-plugins.json`` and recreate the container as
+In Nginx Proxy Manager, upgrade to 2.16.0 or later and recreate the container as
 described in :doc:`installation`; a fresh container comes with an intact certbot.
 
 Plugin not listed by ``certbot plugins``

@@ -71,13 +71,13 @@ Also test the oldest supported line: `certbot>=3.0,<4.0` together with `pyOpenSS
 Smoke test in the Nginx Proxy Manager image (this is the primary consumer):
 
 ```bash
-docker run --rm -v "$PWD/dist:/dist:ro" --entrypoint bash jc21/nginx-proxy-manager:2.15.1 -c '
+docker run --rm -v "$PWD/dist:/dist:ro" --entrypoint bash jc21/nginx-proxy-manager:2.16.0 -c '
   . /opt/certbot/bin/activate
   pip install --no-cache-dir "certbot-dns-azure-modern~=2.8.0" --find-links /dist
   pip check && certbot --version && certbot plugins --text | grep -A1 dns-azure'
 ```
 
-Expected: certbot stays at the image version (5.6.0 in 2.15.1), `pip check` clean,
+Expected: certbot stays at the image version (5.8.0 in 2.16.0), `pip check` clean,
 `dns-azure` listed.
 
 ## Azure integration tests
@@ -142,11 +142,13 @@ pytest -rA azure_tests/
 
 Nginx Proxy Manager installs plugins with
 `pip install --no-cache-dir <dependencies> '<package_name><version>'` from
-`backend/certbot/dns-plugins.json`. Target entry for an upstream PR:
+`backend/certbot/dns-plugins.json`. Since 2.16.0 (NginxProxyManager PR #5831) the
+entry is:
 
 ```json
 "azure": { "dependencies": "", "package_name": "certbot-dns-azure-modern", "version": "~=2.8.0" }
 ```
 
-Users can override that file until the PR lands (bind-mount a patched copy over
-`/app/certbot/dns-plugins.json` and recreate the container, see README).
+`~=2.8.0` means `>=2.8.0,<2.9`: Nginx Proxy Manager picks up 2.8.x releases on the next
+plugin install, but not 2.9.0. Ship fixes as 2.8.x; a 2.9.0 needs a follow-up pull
+request to Nginx Proxy Manager that raises the version there.
