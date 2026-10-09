@@ -129,8 +129,9 @@ Check what public DNS returns while certbot is waiting:
   the domain's NS records with the name servers of the Azure zone.
 - A CNAME: you are using delegation; make sure the target matches the mapping, see
   :doc:`dns-delegation`.
-- An old value, or failures only now and then: raise
-  ``--dns-azure-propagation-seconds``, see :ref:`propagation`.
+- The right value, but the request failed with ``No TXT record found`` or ``NXDOMAIN
+  looking up TXT``: Let's Encrypt checked too early. Raise
+  ``--dns-azure-propagation-seconds`` to 30, see :ref:`propagation`.
 
 ``Unsafe permissions on credentials configuration file``
 --------------------------------------------------------

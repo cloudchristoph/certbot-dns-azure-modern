@@ -55,15 +55,23 @@ renewal of all certificates, which is worth doing after rotating a secret.
 Propagation time
 ----------------
 
-After creating the TXT record the plugin waits ``--dns-azure-propagation-seconds``
-(default 10) before the ACME server validates; certbot does not poll DNS. Microsoft
+After creating the TXT records the plugin waits ``--dns-azure-propagation-seconds``
+(default 10) before the ACME server validates. Certbot waits the full time and does
+not check earlier; the wait happens once per certificate, not per name. Microsoft
 states that changes reach all Azure DNS name servers within 60 seconds, usually much
-faster, so the default normally works. If validation fails intermittently, wait
-longer:
+faster, so the default normally works.
+
+If a request fails with ``No TXT record found`` or ``NXDOMAIN looking up TXT`` although
+the mapping is right, Let's Encrypt asked before every Azure name server had the
+record. Wait longer, 30 seconds usually suffice, 60 cover Microsoft's guarantee:
 
 .. code-block:: bash
 
-   certbot certonly --authenticator dns-azure --dns-azure-propagation-seconds 60 ...
+   certbot certonly --authenticator dns-azure --dns-azure-propagation-seconds 30 ...
+
+A value given on the command line is stored for renewal. A single failed renewal is
+harmless: certbot's timer and Nginx Proxy Manager try again automatically, long
+before the certificate expires.
 
 How it works
 ------------
