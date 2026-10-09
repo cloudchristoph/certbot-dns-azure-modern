@@ -8,7 +8,8 @@ install_requires = [
     # 8.x and 9.x are both supported; DnsManagementClient is constructed with keyword
     # arguments because 9.x changed the positional signature.
     'azure-mgmt-dns>=8.2.0',
-    'azure-core>=1.32.0',
+    # 1.38.0 fixes CVE-2026-21226 (deserialization of untrusted data).
+    'azure-core>=1.38.0',
     # No upper bound: the old '<4.0' cap forced pip to downgrade certbot/acme in
     # shared venvs (e.g. Nginx Proxy Manager) and broke certbot on import.
     'certbot>=3.0',

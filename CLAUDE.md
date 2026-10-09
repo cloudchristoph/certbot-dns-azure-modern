@@ -54,7 +54,7 @@ The plugin code itself works unchanged with certbot 5.x; only the pin was the pr
 
 ```bash
 uv venv --python 3.13 .venv && . .venv/bin/activate
-uv pip install certbot 'azure-identity>=1.19.0' 'azure-mgmt-dns>=8.2.0' 'azure-core>=1.32.0' pytest build twine
+uv pip install certbot 'azure-identity>=1.19.0' 'azure-mgmt-dns>=8.2.0' 'azure-core>=1.38.0' pytest build twine
 uv pip install --no-deps -e .
 python -m pytest -q tests/ -W error::DeprecationWarning
 python -m build && python -m twine check dist/*
