@@ -20,8 +20,9 @@ published on PyPI as
 The upstream package (last release 2.6.1, December 2024) pins ``certbot<4.0``.
 Installing it next to a current certbot makes pip downgrade certbot and acme to 3.3.0,
 which no longer imports against pyOpenSSL 26. This is what broke Azure DNS
-certificates in Nginx Proxy Manager 2.15 and later
-(`NginxProxyManager#5606 <https://github.com/NginxProxyManager/nginx-proxy-manager/issues/5606>`_).
+certificates in Nginx Proxy Manager 2.15
+(`NginxProxyManager#5606 <https://github.com/NginxProxyManager/nginx-proxy-manager/issues/5606>`_);
+Nginx Proxy Manager 2.16.0 and later use this fork.
 The upstream fix (`#65 <https://github.com/terricain/certbot-dns-azure/pull/65>`_) has
 been waiting for a maintainer since early 2026.
 

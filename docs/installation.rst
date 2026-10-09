@@ -39,50 +39,25 @@ The ``-U`` matters: if the upstream package already downgraded certbot and acme 
 Nginx Proxy Manager
 -------------------
 
-Nginx Proxy Manager installs DNS plugins on demand with ``pip`` into its bundled
-certbot environment, using the package names from ``/app/certbot/dns-plugins.json``.
-Until the fork is referenced there upstream, override the ``azure`` entry:
+Nginx Proxy Manager 2.16.0 and later use this package for the "Azure" DNS provider
+(`NginxProxyManager#5831 <https://github.com/NginxProxyManager/nginx-proxy-manager/pull/5831>`_).
+Nothing needs to be installed: pick "Azure" as DNS provider in the web UI and paste the
+content of the config file into the credentials text box, see :doc:`configuration`.
+Nginx Proxy Manager installs the plugin with ``pip`` into its bundled certbot
+environment on first use.
 
-1. Copy the file out of the running container:
+Nginx Proxy Manager 2.15.x still installs the broken upstream package. Upgrade to
+2.16.0 or later and recreate the container, so that a certbot downgraded by the
+upstream plugin is not left behind:
 
-   .. code-block:: bash
+.. code-block:: bash
 
-      docker cp nginx-proxy-manager:/app/certbot/dns-plugins.json ./dns-plugins.json
+   docker compose pull && docker compose up -d --force-recreate
 
-2. Edit the ``azure`` entry so that it points at this package:
-
-   .. code-block:: json
-
-      "azure": {
-        "dependencies": "",
-        "package_name": "certbot-dns-azure-modern",
-        "version": "~=2.8.0"
-      }
-
-3. Bind-mount the patched copy over the original and recreate the container, for
-   example with Docker Compose:
-
-   .. code-block:: yaml
-
-      services:
-        app:
-          image: jc21/nginx-proxy-manager:latest
-          volumes:
-            - ./data:/data
-            - ./letsencrypt:/etc/letsencrypt
-            - ./dns-plugins.json:/app/certbot/dns-plugins.json:ro
-
-   .. code-block:: bash
-
-      docker compose up -d --force-recreate
-
-   Recreating the container is required: the certbot environment lives inside the
-   container, and a fresh one guarantees that no downgraded certbot from an earlier
-   attempt with the upstream plugin is left behind.
-
-4. Request or renew a certificate with the "Azure" DNS provider in the web UI as
-   usual. The credentials text box takes the content of the config file, see
-   :doc:`configuration`.
+If you used the earlier workaround and bind-mounted a patched
+``/app/certbot/dns-plugins.json`` into the container, remove that volume when
+upgrading. The patched copy replaces the whole plugin list of the image, so it would
+also hide later updates to other DNS plugins.
 
 Verify inside the container that certbot kept the image version and sees the plugin:
 
@@ -90,6 +65,9 @@ Verify inside the container that certbot kept the image version and sees the plu
 
    docker exec nginx-proxy-manager bash -c \
      '. /opt/certbot/bin/activate && certbot --version && certbot plugins --text | grep -A1 dns-azure'
+
+The plugin is only installed after the first certificate request with the "Azure"
+provider; before that, ``dns-azure`` is not listed.
 
 Docker
 ------
